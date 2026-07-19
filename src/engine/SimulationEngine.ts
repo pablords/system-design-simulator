@@ -173,14 +173,25 @@ export function runSimulationTick(
 
     const outEdges = outboundEdges[currentId] ?? [];
     if (outEdges.length > 0) {
+      // Split into business edges and telemetry edges (to prevent telemetry from stealing business API RPS)
+      const businessEdges = outEdges.filter(e => {
+        const tgt = nodeMap.get(e.target);
+        return tgt?.data.category !== 'observability';
+      });
+      const telemetryEdges = outEdges.filter(e => {
+        const tgt = nodeMap.get(e.target);
+        return tgt?.data.category === 'observability';
+      });
+
       // Filter target edges based on allowed traffic types (CQRS routing)
-      const readEdges = outEdges.filter(e => !e.data?.trafficType || e.data.trafficType === 'all' || e.data.trafficType === 'read');
-      const writeEdges = outEdges.filter(e => !e.data?.trafficType || e.data.trafficType === 'all' || e.data.trafficType === 'write');
+      const readEdges = businessEdges.filter(e => !e.data?.trafficType || e.data.trafficType === 'all' || e.data.trafficType === 'read');
+      const writeEdges = businessEdges.filter(e => !e.data?.trafficType || e.data.trafficType === 'all' || e.data.trafficType === 'write');
 
       const readRpsPerEdge = readEdges.length > 0 ? outboundReadRps / readEdges.length : 0;
       const writeRpsPerEdge = writeEdges.length > 0 ? outboundWriteRps / writeEdges.length : 0;
 
-      for (const edge of outEdges) {
+      // 1. Process business edges
+      for (const edge of businessEdges) {
         let edgeRead = 0;
         let edgeWrite = 0;
 
@@ -196,6 +207,35 @@ export function runSimulationTick(
         edgeWriteRpsMap[edge.id] = edgeWrite;
 
         inboundRpsMap[edge.target] = (inboundRpsMap[edge.target] ?? 0) + edgeTotal;
+        inboundReadRpsMap[edge.target] = (inboundReadRpsMap[edge.target] ?? 0) + edgeRead;
+        inboundWriteRpsMap[edge.target] = (inboundWriteRpsMap[edge.target] ?? 0) + edgeWrite;
+
+        if (!visited.has(edge.target)) queue.push(edge.target);
+      }
+
+      // 2. Process telemetry edges (out-of-band metrics/logs/traces, do not steal business RPS)
+      for (const edge of telemetryEdges) {
+        const tgt = nodeMap.get(edge.target);
+        const tgtType = tgt?.data.componentType;
+        
+        let teleRps = 0;
+        if (tgtType === 'metrics' || tgtType === 'logs') {
+          teleRps = inboundRead + inboundWrite; // 100% telemetry RPS
+        } else if (tgtType === 'tracing') {
+          teleRps = (inboundRead + inboundWrite) * 0.1; // 10% sampled tracing RTT
+        } else if (tgtType === 'alerting' || tgtType === 'health-check') {
+          teleRps = 1; // Constant ping
+        }
+
+        const ratio = (inboundRead + inboundWrite) > 0 ? inboundWrite / (inboundRead + inboundWrite) : 0.1;
+        const edgeWrite = teleRps * ratio;
+        const edgeRead = teleRps * (1 - ratio);
+
+        edgeRpsMap[edge.id] = teleRps;
+        edgeReadRpsMap[edge.id] = edgeRead;
+        edgeWriteRpsMap[edge.id] = edgeWrite;
+
+        inboundRpsMap[edge.target] = (inboundRpsMap[edge.target] ?? 0) + teleRps;
         inboundReadRpsMap[edge.target] = (inboundReadRpsMap[edge.target] ?? 0) + edgeRead;
         inboundWriteRpsMap[edge.target] = (inboundWriteRpsMap[edge.target] ?? 0) + edgeWrite;
 
@@ -585,11 +625,19 @@ export function runSimulationTick(
 
     const status = isNowCrashing ? 'critical' : computeStatus(cpuPct, ramPct, utilization);
 
+    const jitter = utilization > 1 ? (utilization - 1) * 0.4 : 0.05;
+    const p50 = Math.round(latencyMs * 0.9 * 10) / 10;
+    const p95 = Math.round(latencyMs * (1.2 + jitter * 2) * 10) / 10;
+    const p99 = Math.round(latencyMs * (1.5 + jitter * 5) * 10) / 10;
+
     const snapshot: MetricSnapshot = {
       tick,
       cpuPct: Math.round(cpuPct),
       ramPct: Math.round(ramPct),
       latencyMs: Math.round(latencyMs * 10) / 10,
+      p50,
+      p95,
+      p99,
       rps: Math.round(inbound),
       successRps: Math.round(localSuccess),
       failedRps: Math.round(localFailures),
@@ -605,6 +653,9 @@ export function runSimulationTick(
       ramPct: Math.round(ramPct),
       storagePct: Math.round(storagePct * 10) / 10,
       latencyMs: Math.round(latencyMs * 10) / 10,
+      p50,
+      p95,
+      p99,
       queueDepth,
       status,
       history,
@@ -662,6 +713,50 @@ export function runSimulationTick(
           limit: 100,
           message: `CPU at ${Math.round(cpuPct)}% — server is crashing soon!`,
         });
+      }
+    }
+  }
+
+  // Step 2.5: Observability log generation
+  for (const node of nodes) {
+    if (node.data.componentType === 'logs') {
+      const targetInEdges = inboundEdges[node.id] ?? [];
+      const connectedInwardNodes = targetInEdges
+        .map((edge) => nodeMap.get(edge.source))
+        .filter((n): n is Node<SimulatorNodeData> => !!n);
+      
+      const newLogs: string[] = [];
+      const timestamp = new Date().toLocaleTimeString('pt-BR', { hour12: false });
+      
+      for (const srcNode of connectedInwardNodes) {
+        const srcMetrics = updatedMetrics[srcNode.id];
+        if (!srcMetrics) continue;
+
+        const srcCfg = srcNode.data.config;
+        const inboundVal = Math.round(srcMetrics.inboundRps);
+        
+        if (srcMetrics.status === 'critical') {
+          newLogs.push(`[${timestamp}] [ERROR] [${srcCfg.label}] CRITICAL: CPU em ${srcMetrics.cpuPct}%, falhas: ${Math.round(srcMetrics.failedRps ?? 0)}/s`);
+        } else if (srcMetrics.status === 'warning') {
+          newLogs.push(`[${timestamp}] [WARN] [${srcCfg.label}] Sobrecarga: CPU em ${srcMetrics.cpuPct}%, latência média: ${srcMetrics.latencyMs}ms`);
+        } else if (inboundVal > 0) {
+          const successRate = srcMetrics.inboundRps > 0 
+            ? Math.round(((srcMetrics.successRps ?? srcMetrics.inboundRps) / srcMetrics.inboundRps) * 100)
+            : 100;
+          newLogs.push(`[${timestamp}] [INFO] [${srcCfg.label}] RPS: ${inboundVal} | Sucesso: ${successRate}% | CPU: ${srcMetrics.cpuPct}%`);
+        }
+      }
+
+      if (connectedInwardNodes.length === 0) {
+        newLogs.push(`[${timestamp}] [WARN] Nenhum nó conectado à entrada para monitoramento de logs.`);
+      }
+
+      const prevMetrics = node.data.metrics;
+      const prevLogs = prevMetrics?.logs ?? [];
+      const updatedLogs = [...prevLogs, ...newLogs].slice(-55); // keep last 55 log lines
+      
+      if (updatedMetrics[node.id]) {
+        updatedMetrics[node.id].logs = updatedLogs;
       }
     }
   }

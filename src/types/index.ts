@@ -111,6 +111,12 @@ export interface NodeMetrics {
   failedRps?: number;
   cbState?: 'CLOSED' | 'OPEN' | 'HALF-OPEN';
   cbOpenTimer?: number;
+
+  // Observability metrics
+  p50?: number;
+  p95?: number;
+  p99?: number;
+  logs?: string[];
 }
 
 export interface MetricSnapshot {
@@ -118,6 +124,9 @@ export interface MetricSnapshot {
   cpuPct: number;
   ramPct: number;
   latencyMs: number;
+  p50?: number;
+  p95?: number;
+  p99?: number;
   rps: number;
   successRps?: number;
   failedRps?: number;

@@ -109,6 +109,24 @@ export const ConfigPanel: React.FC = () => {
   const node = nodes.find((n) => n.id === selectedNodeId);
   const edge = edges.find((e) => e.id === selectedEdgeId);
 
+  const [selectedTraceSourceId, setSelectedTraceSourceId] = React.useState<string>('');
+
+  const incomingEdges = React.useMemo(() => {
+    return node ? edges.filter(e => e.target === node.id) : [];
+  }, [node, edges]);
+
+  const incomingNodes = React.useMemo(() => {
+    return incomingEdges.map(e => nodes.find(n => n.id === e.source)).filter((n): n is typeof n & {} => !!n);
+  }, [incomingEdges, nodes]);
+
+  React.useEffect(() => {
+    if (node && incomingNodes.length > 0) {
+      setSelectedTraceSourceId(incomingNodes[0]!.id);
+    } else {
+      setSelectedTraceSourceId('');
+    }
+  }, [selectedNodeId, incomingNodes, node]);
+
   const update = (key: string, value: number | string | boolean) => {
     if (node) updateNodeConfig(node.id, { [key]: value });
   };
@@ -393,6 +411,361 @@ export const ConfigPanel: React.FC = () => {
     RPS: h.rps,
   }));
 
+  const renderObservabilityView = () => {
+    if (!node) return null;
+    const compType = node.data.componentType;
+    const nodeId = node.id;
+
+    if (compType === 'metrics') {
+      return (
+        <div style={{ marginTop: '16px', borderTop: '1px solid #1e293b', paddingTop: '16px' }}>
+          <div className="config-section-title" style={{ marginBottom: '8px' }}>
+            <Activity size={14} /> Telemetria de Métricas Ingeridas
+          </div>
+          {incomingNodes.length === 0 ? (
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '8px 0' }}>
+              Nenhuma entrada de telemetria conectada. Ligue servidores ou bancos a este coletor.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #1e293b', color: 'var(--text-muted)' }}>
+                    <th style={{ padding: '6px 4px' }}>Componente</th>
+                    <th style={{ padding: '6px 4px', textAlign: 'right' }}>RPS</th>
+                    <th style={{ padding: '6px 4px', textAlign: 'right' }}>CPU</th>
+                    <th style={{ padding: '6px 4px', textAlign: 'right' }}>Lat Média</th>
+                    <th style={{ padding: '6px 4px', textAlign: 'right' }}>p99</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {incomingNodes.map(n => {
+                    const m = n!.data.metrics;
+                    return (
+                      <tr key={n!.id} style={{ borderBottom: '1px solid #0f172a' }}>
+                        <td style={{ padding: '6px 4px', fontWeight: 500, color: '#fff' }}>{n!.data.config.label}</td>
+                        <td style={{ padding: '6px 4px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{Math.round(m.inboundRps)}</td>
+                        <td style={{ padding: '6px 4px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{m.cpuPct}%</td>
+                        <td style={{ padding: '6px 4px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{m.latencyMs}ms</td>
+                        <td style={{ padding: '6px 4px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: '#f87171' }}>{m.p99 ?? m.latencyMs}ms</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (compType === 'logs') {
+      const logsList = metrics.logs ?? [];
+      return (
+        <div style={{ marginTop: '16px', borderTop: '1px solid #1e293b', paddingTop: '16px' }}>
+          <div className="config-section-title" style={{ marginBottom: '8px' }}>
+            <Activity size={14} /> Console de Logs do Sistema
+          </div>
+          <div 
+            style={{
+              background: '#040711',
+              border: '1px solid #1e293b',
+              borderRadius: '6px',
+              padding: '10px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '10px',
+              color: '#34d399',
+              maxHeight: '180px',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px',
+              lineHeight: '1.4',
+              textAlign: 'left'
+            }}
+            ref={(el) => {
+              if (el) el.scrollTop = el.scrollHeight;
+            }}
+          >
+            {logsList.length === 0 ? (
+              <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                [Aguardando ticks de simulação... Ligue servidores na entrada]
+              </span>
+            ) : (
+              logsList.map((log, idx) => {
+                let color = '#34d399';
+                if (log.includes('[ERROR]')) color = '#f87171';
+                else if (log.includes('[WARN]')) color = '#fbbf24';
+                return <span key={idx} style={{ color }}>{log}</span>;
+              })
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (compType === 'tracing') {
+      const sourceToTrace = incomingNodes.find(n => n!.id === selectedTraceSourceId);
+
+      const generateTelemetrySpans = (traceNodeId: string) => {
+        interface TraceSpan {
+          id: string;
+          label: string;
+          componentType: string;
+          startMs: number;
+          durationMs: number;
+          depth: number;
+          status: 'ok' | 'error';
+        }
+
+        const spans: TraceSpan[] = [];
+        const visited = new Set<string>();
+
+        function buildTrace(nId: string, currentOffset: number, depth: number) {
+          if (visited.has(nId)) return;
+          visited.add(nId);
+
+          const currNode = nodes.find((n) => n.id === nId);
+          if (!currNode) return;
+
+          const currMetrics = currNode.data.metrics;
+          const currCfg = currNode.data.config;
+
+          const isError = currMetrics.cbState === 'OPEN' || (currMetrics.failedRps ?? 0) > ((currMetrics.inboundRps ?? 0) * 0.1) || currMetrics.status === 'critical';
+          const nodeLatency = currMetrics.latencyMs || 0.1;
+
+          const nodeOutEdges = edges.filter((e) => e.source === nId && e.target !== nodeId);
+          const nextOffset = currentOffset + nodeLatency;
+          let maxChildDuration = 0;
+
+          let sequentialOffset = nextOffset;
+
+          for (const edge of nodeOutEdges) {
+            const edgeMetrics = edge.data?.metrics as any;
+            const edgeWait = edgeMetrics?.queueWaitTimeMs ?? 0;
+            const edgeNetwork = (edge.data?.networkLatencyMs as number) ?? 0;
+            const connectionDelay = edgeWait + edgeNetwork;
+
+            const targetId = edge.target;
+            const callStart = sequentialOffset;
+            
+            buildTrace(targetId, callStart + connectionDelay, depth + 1);
+            
+            const targetNodeMetrics = nodes.find((n) => n.id === targetId)?.data.metrics;
+            const targetE2E = targetNodeMetrics?.endToEndLatencyMs ?? targetNodeMetrics?.latencyMs ?? 0;
+            const childTotalDuration = connectionDelay + targetE2E;
+            
+            sequentialOffset += childTotalDuration;
+            maxChildDuration = Math.max(maxChildDuration, (callStart - nextOffset) + childTotalDuration);
+          }
+
+          const spanDuration = nodeLatency + maxChildDuration;
+
+          spans.push({
+            id: nId,
+            label: currCfg.label,
+            componentType: currNode.data.componentType,
+            startMs: currentOffset,
+            durationMs: spanDuration,
+            depth,
+            status: isError ? 'error' : 'ok',
+          });
+        }
+
+        buildTrace(traceNodeId, 0, 0);
+        return spans.sort((a, b) => a.startMs - b.startMs || a.depth - b.depth);
+      };
+
+      const spans = sourceToTrace ? generateTelemetrySpans(sourceToTrace.id) : [];
+      const totalDuration = spans.length > 0 ? Math.max(...spans.map(s => s.startMs + s.durationMs)) : 0;
+      const scale = totalDuration > 0 ? totalDuration : 1;
+
+      return (
+        <div style={{ marginTop: '16px', borderTop: '1px solid #1e293b', paddingTop: '16px' }}>
+          <div className="config-section-title" style={{ marginBottom: '8px' }}>
+            <Activity size={14} /> Distributed Tracing Collector
+          </div>
+          {incomingNodes.length === 0 ? (
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '8px 0' }}>
+              Nenhuma entrada de trace conectada. Ligue clientes ou APIs a este coletor.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div className="config-field">
+                <label className="config-label">Inspecionar Origem do Trace</label>
+                <select
+                  value={selectedTraceSourceId}
+                  onChange={(e) => setSelectedTraceSourceId(e.target.value)}
+                  className="config-input"
+                  style={{ background: '#192231', border: '1px solid #334155', borderRadius: '4px', color: '#fff', fontSize: '11px', padding: '4px 8px' }}
+                >
+                  {incomingNodes.map(n => (
+                    <option key={n!.id} value={n!.id}>{n!.data.config.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {sourceToTrace && spans.length > 0 && (
+                <div style={{ background: '#090d16', border: '1px solid #1e293b', borderRadius: '6px', padding: '10px', marginTop: '6px' }}>
+                  <div style={{ display: 'flex', borderBottom: '1px solid #1e293b', paddingBottom: '4px', marginBottom: '4px', fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                    <div style={{ flex: 1 }}>Span</div>
+                    <div style={{ width: '100px', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>0ms</span>
+                      <span>{Math.round(totalDuration)}ms</span>
+                    </div>
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    {spans.map((s) => {
+                      const leftPct = (s.startMs / scale) * 100;
+                      const widthPct = Math.max(1, (s.durationMs / scale) * 100);
+                      const isErr = s.status === 'error';
+                      
+                      return (
+                        <div key={s.id} style={{ display: 'flex', alignItems: 'center', fontSize: '9px' }}>
+                          <div style={{ flex: 1, paddingLeft: `${s.depth * 8}px`, display: 'flex', alignItems: 'center', gap: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: '7px', color: isErr ? '#ef4444' : '#818cf8' }}>
+                              {s.depth > 0 ? '↳' : '●'}
+                            </span>
+                            <span style={{ fontWeight: 500, color: isErr ? '#fca5a5' : '#ffffff' }}>
+                              {s.label}
+                            </span>
+                          </div>
+                          
+                          <div style={{ width: '100px', height: '11px', position: 'relative', background: 'rgba(255,255,255,0.02)', borderRadius: '2px' }}>
+                            <div 
+                              style={{
+                                position: 'absolute',
+                                left: `${leftPct}%`,
+                                width: `${widthPct}%`,
+                                height: '100%',
+                                background: isErr ? '#ef4444' : '#6366f1',
+                                borderRadius: '1px',
+                              }}
+                            />
+                            <span style={{ position: 'absolute', right: '2px', fontSize: '7px', fontFamily: 'var(--font-mono)', lineHeight: '11px', color: isErr ? '#fca5a5' : '#94a3b8', zIndex: 1 }}>
+                              {Math.round(s.durationMs)}ms
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (compType === 'alerting') {
+      const activeAlerts = incomingNodes
+        .map(n => {
+          const m = n!.data.metrics;
+          const c = n!.data.config;
+          if (m.status === 'critical') {
+            return { label: c.label, severity: 'CRITICAL', msg: `Uso crítico de recursos no servidor: CPU em ${m.cpuPct}%, erros em ${Math.round(m.failedRps ?? 0)}/s` };
+          }
+          if (m.status === 'warning') {
+            return { label: c.label, severity: 'WARNING', msg: `Uso elevado detectado: CPU em ${m.cpuPct}%` };
+          }
+          return null;
+        })
+        .filter(Boolean);
+
+      return (
+        <div style={{ marginTop: '16px', borderTop: '1px solid #1e293b', paddingTop: '16px' }}>
+          <div className="config-section-title" style={{ marginBottom: '8px' }}>
+            <Activity size={14} /> Gerenciador de Alertas Ativos
+          </div>
+          {incomingNodes.length === 0 ? (
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '8px 0' }}>
+              Nenhuma entrada conectada. Ligue servidores a este alerta.
+            </div>
+          ) : activeAlerts.length === 0 ? (
+            <div style={{ padding: '10px', background: 'rgba(34, 197, 94, 0.08)', border: '1px solid #22c55e', borderRadius: '6px', color: '#86efac', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px', textAlign: 'left' }}>
+              <span>🟢</span>
+              <span>Todos os sistemas operando normalmente. Nenhum alerta disparado.</span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
+              {activeAlerts.map((a, idx) => (
+                <div 
+                  key={idx}
+                  style={{
+                    padding: '8px 10px',
+                    background: a!.severity === 'CRITICAL' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                    border: '1px solid',
+                    borderColor: a!.severity === 'CRITICAL' ? '#ef4444' : '#f59e0b',
+                    borderRadius: '6px',
+                    fontSize: '11px'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: a!.severity === 'CRITICAL' ? '#fca5a5' : '#fde047' }}>
+                    <span>🚨 {a!.severity}: {a!.label}</span>
+                    <span style={{ fontSize: '9px', textTransform: 'uppercase', opacity: 0.8 }}>PagerDuty</span>
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: '1.4' }}>
+                    {a!.msg}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (compType === 'health-check') {
+      return (
+        <div style={{ marginTop: '16px', borderTop: '1px solid #1e293b', paddingTop: '16px' }}>
+          <div className="config-section-title" style={{ marginBottom: '8px' }}>
+            <Activity size={14} /> Heartbeat Monitor (Saúde)
+          </div>
+          {incomingNodes.length === 0 ? (
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '8px 0' }}>
+              Nenhuma entrada conectada. Ligue servidores a este monitor.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
+              {incomingNodes.map(n => {
+                const m = n!.data.metrics;
+                const c = n!.data.config;
+                const isHealthy = m.status !== 'critical';
+                return (
+                  <div 
+                    key={n!.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 10px',
+                      background: 'rgba(30, 41, 59, 0.3)',
+                      border: '1px solid #334155',
+                      borderRadius: '6px',
+                      fontSize: '11px'
+                    }}
+                  >
+                    <span style={{ fontWeight: 500, color: '#fff' }}>{c.label}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isHealthy ? '#22c55e' : '#ef4444' }} />
+                      <span style={{ fontWeight: 600, color: isHealthy ? '#86efac' : '#fca5a5' }}>
+                        {isHealthy ? 'HEALTHY' : 'DOWN / CRASHED'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <aside className="config-panel">
       {/* Header */}
@@ -446,6 +819,8 @@ export const ConfigPanel: React.FC = () => {
             }}
           />
         </div>
+
+        {renderObservabilityView()}
 
         {/* Capacity Section (Conditional) */}
         {(config.replicas !== undefined || config.maxRps !== undefined || config.connectionPool !== undefined || config.timeoutMs !== undefined) && (
@@ -719,6 +1094,11 @@ export const ConfigPanel: React.FC = () => {
                 <Clock size={14} className="metric-card-icon" />
                 <span className="metric-card-label">Latency</span>
                 <span className="metric-card-value">{metrics.latencyMs}ms</span>
+                {metrics.p50 !== undefined && (
+                  <span style={{ fontSize: 9, display: 'block', color: 'var(--text-muted)', fontWeight: 400, marginTop: 4, lineHeight: 1.3 }}>
+                    p50: {metrics.p50}ms | p95: {metrics.p95}ms | p99: {metrics.p99}ms
+                  </span>
+                )}
               </div>
               {def.accumulatesStorage && config.storageGb !== undefined && (
                 <div className="metric-card">
