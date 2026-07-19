@@ -134,6 +134,12 @@ export const ComponentNode = memo(({ id, data: rawData, selected }: NodeProps) =
         </div>
       )}
 
+      {config.notes && (
+        <div className="node-notes-preview" title={config.notes}>
+          📝 {config.notes.length > 22 ? config.notes.substring(0, 19) + '...' : config.notes}
+        </div>
+      )}
+
       {!def.isSink && (
         <Handle type="source" position={Position.Right} className="node-handle node-handle-out" />
       )}

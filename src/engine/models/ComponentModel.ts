@@ -281,7 +281,7 @@ export const COMPONENT_DEFINITIONS: Record<ComponentType, ComponentDefinition> =
     baseLatencyMs: 5,
     accumulatesStorage: true,
     isSource: false,
-    isSink: true,
+    isSink: false,
   },
   'nosql-db': {
     type: 'nosql-db',
@@ -296,7 +296,7 @@ export const COMPONENT_DEFINITIONS: Record<ComponentType, ComponentDefinition> =
     baseLatencyMs: 3,
     accumulatesStorage: true,
     isSource: false,
-    isSink: true,
+    isSink: false,
   },
   'cache': {
     type: 'cache',

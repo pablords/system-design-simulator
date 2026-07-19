@@ -53,6 +53,7 @@ export type NodeStatus = 'idle' | 'ok' | 'warning' | 'critical';
 
 export interface ComponentConfig {
   label: string;
+  notes?: string;          // custom notes / annotations on nodes
   replicas?: number;
   maxRps?: number;
   cpuCores?: number;

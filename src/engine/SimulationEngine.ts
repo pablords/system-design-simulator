@@ -107,6 +107,10 @@ export function runSimulationTick(
     if (crashedNodesSet.has(currentId)) {
       outboundReadRps = 0;
       outboundWriteRps = 0;
+    } else if (currentNode.data.componentType === 'sql-database' || currentNode.data.componentType === 'nosql-db') {
+      // Padrão CDC: Bancos de dados encerram tráfego de leitura, mas propagam as escritas (change capture log)
+      outboundReadRps = 0;
+      outboundWriteRps = inboundWrite;
     } else if (def.isSink) {
       outboundReadRps = 0;
       outboundWriteRps = 0;

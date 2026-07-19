@@ -140,6 +140,32 @@ export const ConfigPanel: React.FC = () => {
           />
         </div>
 
+        {/* Notes */}
+        <div className="config-field" style={{ marginBottom: '14px' }}>
+          <label className="config-label">Notas / Descrição</label>
+          <textarea
+            value={config.notes ?? ''}
+            onChange={(e) => update('notes', e.target.value)}
+            placeholder="Adicione observações sobre a arquitetura deste nó..."
+            className="config-input"
+            rows={2}
+            style={{
+              width: '100%',
+              padding: '6px 10px',
+              background: '#192231',
+              border: '1px solid #334155',
+              borderRadius: '4px',
+              color: '#ffffff',
+              fontSize: '11px',
+              fontFamily: 'inherit',
+              lineHeight: '1.4',
+              resize: 'vertical',
+              minHeight: '48px',
+              marginTop: '4px'
+            }}
+          />
+        </div>
+
         {/* Capacity Section (Conditional) */}
         {(config.replicas !== undefined || config.maxRps !== undefined || config.connectionPool !== undefined || config.timeoutMs !== undefined) && (
           <>
