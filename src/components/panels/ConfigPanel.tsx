@@ -241,8 +241,8 @@ export const ConfigPanel: React.FC = () => {
         <div className="config-section-title" style={{ marginTop: '16px' }}>
           <Layers size={14} /> Conexões Rápidas
         </div>
-        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '8px', lineHeight: '1.4' }}>
-          Ligue ou desligue este componente a outros nós do canvas sem precisar arrastar:
+        <div style={{ fontSize: '9px', color: '#ef4444', marginBottom: '8px', fontFamily: 'monospace' }}>
+          [DEBUG] Total nodes: {nodes.length} | Others: {nodes.filter(n => n.id !== node.id).map(n => n.id).join(', ')}
         </div>
         <div className="btn-connect-container">
           {nodes.filter(n => n.id !== node.id).length === 0 ? (
