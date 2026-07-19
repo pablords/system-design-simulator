@@ -61,14 +61,27 @@ export function runSimulationTick(
     overloadCounters[node.id] = overload;
   }
 
-  // Step 1: Nominal BFS propagation of load/RPS
+  // Step 1: Nominal BFS propagation of load/RPS (Read & Write separated)
   const inboundRpsMap: Record<string, number> = {};
+  const inboundReadRpsMap: Record<string, number> = {};
+  const inboundWriteRpsMap: Record<string, number> = {};
+
   const edgeRpsMap: Record<string, number> = {};
+  const edgeReadRpsMap: Record<string, number> = {};
+  const edgeWriteRpsMap: Record<string, number> = {};
 
   for (const node of nodes) {
     const def = COMPONENT_DEFINITIONS[node.data.componentType];
     if (def.isSource) {
-      inboundRpsMap[node.id] = (node.data.config.maxRps ?? 0) * (node.data.config.replicas ?? 1) * (globalTrafficScale / 100);
+      const totalRps = (node.data.config.maxRps ?? 0) * (node.data.config.replicas ?? 1) * (globalTrafficScale / 100);
+      const ratio = node.data.config.writeRatio ?? 0.1;
+      inboundRpsMap[node.id] = totalRps;
+      inboundReadRpsMap[node.id] = totalRps * (1 - ratio);
+      inboundWriteRpsMap[node.id] = totalRps * ratio;
+    } else {
+      inboundRpsMap[node.id] = 0;
+      inboundReadRpsMap[node.id] = 0;
+      inboundWriteRpsMap[node.id] = 0;
     }
   }
 
@@ -85,32 +98,68 @@ export function runSimulationTick(
 
     const def = COMPONENT_DEFINITIONS[currentNode.data.componentType];
     const inbound = inboundRpsMap[currentId] ?? 0;
+    const inboundRead = inboundReadRpsMap[currentId] ?? 0;
+    const inboundWrite = inboundWriteRpsMap[currentId] ?? 0;
     const effectiveMaxRps = (currentNode.data.config.maxRps ?? 0) * (currentNode.data.config.replicas ?? 1);
 
-    let outboundRps: number;
+    let outboundReadRps: number = 0;
+    let outboundWriteRps: number = 0;
+
     if (crashedNodesSet.has(currentId)) {
-      outboundRps = 0;
-    } else if (currentNode.data.config.cacheHitRate !== undefined) {
-      outboundRps = inbound * (1 - currentNode.data.config.cacheHitRate);
+      outboundReadRps = 0;
+      outboundWriteRps = 0;
     } else if (def.isSink) {
-      outboundRps = 0;
+      outboundReadRps = 0;
+      outboundWriteRps = 0;
     } else {
-      // Propagation logic:
-      // If Semaphore (Rate Limiter) is enabled, limit the outbound RPS.
-      // Otherwise, pass 100% of incoming RPS to allow downstream bottlenecks to be visible.
-      if (currentNode.data.config.rateLimiterEnabled) {
-        outboundRps = Math.min(inbound, effectiveMaxRps);
+      // CDN / Cache Hit Rate only affects Read operations (Write Bypass)
+      if (currentNode.data.config.cacheHitRate !== undefined) {
+        outboundReadRps = inboundRead * (1 - currentNode.data.config.cacheHitRate);
+        outboundWriteRps = inboundWrite; // Bypass cache for write operations
       } else {
-        outboundRps = inbound;
+        outboundReadRps = inboundRead;
+        outboundWriteRps = inboundWrite;
+      }
+
+      // Rate Limiting (Semaphore) - applies proportionally to total traffic if enabled
+      if (currentNode.data.config.rateLimiterEnabled) {
+        const outboundTotalRaw = outboundReadRps + outboundWriteRps;
+        if (outboundTotalRaw > effectiveMaxRps && outboundTotalRaw > 0) {
+          const scale = effectiveMaxRps / outboundTotalRaw;
+          outboundReadRps *= scale;
+          outboundWriteRps *= scale;
+        }
       }
     }
 
     const outEdges = outboundEdges[currentId] ?? [];
     if (outEdges.length > 0) {
-      const rpsPerEdge = outboundRps / outEdges.length;
+      // Filter target edges based on allowed traffic types (CQRS routing)
+      const readEdges = outEdges.filter(e => !e.data?.trafficType || e.data.trafficType === 'all' || e.data.trafficType === 'read');
+      const writeEdges = outEdges.filter(e => !e.data?.trafficType || e.data.trafficType === 'all' || e.data.trafficType === 'write');
+
+      const readRpsPerEdge = readEdges.length > 0 ? outboundReadRps / readEdges.length : 0;
+      const writeRpsPerEdge = writeEdges.length > 0 ? outboundWriteRps / writeEdges.length : 0;
+
       for (const edge of outEdges) {
-        edgeRpsMap[edge.id] = rpsPerEdge;
-        inboundRpsMap[edge.target] = (inboundRpsMap[edge.target] ?? 0) + rpsPerEdge;
+        let edgeRead = 0;
+        let edgeWrite = 0;
+
+        const isReadAllowed = !edge.data?.trafficType || edge.data.trafficType === 'all' || edge.data.trafficType === 'read';
+        const isWriteAllowed = !edge.data?.trafficType || edge.data.trafficType === 'all' || edge.data.trafficType === 'write';
+
+        if (isReadAllowed) edgeRead = readRpsPerEdge;
+        if (isWriteAllowed) edgeWrite = writeRpsPerEdge;
+
+        const edgeTotal = edgeRead + edgeWrite;
+        edgeRpsMap[edge.id] = edgeTotal;
+        edgeReadRpsMap[edge.id] = edgeRead;
+        edgeWriteRpsMap[edge.id] = edgeWrite;
+
+        inboundRpsMap[edge.target] = (inboundRpsMap[edge.target] ?? 0) + edgeTotal;
+        inboundReadRpsMap[edge.target] = (inboundReadRpsMap[edge.target] ?? 0) + edgeRead;
+        inboundWriteRpsMap[edge.target] = (inboundWriteRpsMap[edge.target] ?? 0) + edgeWrite;
+
         if (!visited.has(edge.target)) queue.push(edge.target);
       }
     }
@@ -146,6 +195,8 @@ export function runSimulationTick(
         edgeQueuesMap[edge.id] = 0;
         edgeWaitTimeMap[edge.id] = 0;
         edgeRpsMap[edge.id] = 0; // no successful requests flow through
+        edgeReadRpsMap[edge.id] = 0;
+        edgeWriteRpsMap[edge.id] = 0;
       }
       continue;
     }
@@ -188,7 +239,15 @@ export function runSimulationTick(
           edgeTimeoutsMap[edge.id] = timeoutsPerSecond;
           edgeWaitTimeMap[edge.id] = waitTimeMs;
 
-          edgeRpsMap[edge.id] = Math.max(0, edgeRps - timeoutsPerSecond);
+          const successfulRps = Math.max(0, edgeRps - timeoutsPerSecond);
+          edgeRpsMap[edge.id] = successfulRps;
+
+          // Scale down read/write components proportionally to successful RPS
+          if (edgeRps > 0) {
+            const scale = successfulRps / edgeRps;
+            edgeReadRpsMap[edge.id] = (edgeReadRpsMap[edge.id] ?? 0) * scale;
+            edgeWriteRpsMap[edge.id] = (edgeWriteRpsMap[edge.id] ?? 0) * scale;
+          }
         }
       }
     }
@@ -196,12 +255,21 @@ export function runSimulationTick(
 
   // Recalculate node inbound RPS based on successful requests
   const finalInboundRpsMap: Record<string, number> = {};
+  const finalInboundReadRpsMap: Record<string, number> = {};
+  const finalInboundWriteRpsMap: Record<string, number> = {};
+
   for (const node of nodes) {
     const def = COMPONENT_DEFINITIONS[node.data.componentType];
     if (def.isSource) {
-      finalInboundRpsMap[node.id] = (node.data.config.maxRps ?? 0) * (node.data.config.replicas ?? 1) * (globalTrafficScale / 100);
+      const totalRps = (node.data.config.maxRps ?? 0) * (node.data.config.replicas ?? 1) * (globalTrafficScale / 100);
+      const ratio = node.data.config.writeRatio ?? 0.1;
+      finalInboundRpsMap[node.id] = totalRps;
+      finalInboundReadRpsMap[node.id] = totalRps * (1 - ratio);
+      finalInboundWriteRpsMap[node.id] = totalRps * ratio;
     } else {
       finalInboundRpsMap[node.id] = 0;
+      finalInboundReadRpsMap[node.id] = 0;
+      finalInboundWriteRpsMap[node.id] = 0;
     }
   }
 
@@ -217,7 +285,13 @@ export function runSimulationTick(
     const outEdges = outboundEdges[currentId] ?? [];
     for (const edge of outEdges) {
       const finalEdgeRps = edgeRpsMap[edge.id] ?? 0;
+      const finalEdgeRead = edgeReadRpsMap[edge.id] ?? 0;
+      const finalEdgeWrite = edgeWriteRpsMap[edge.id] ?? 0;
+
       finalInboundRpsMap[edge.target] = (finalInboundRpsMap[edge.target] ?? 0) + finalEdgeRps;
+      finalInboundReadRpsMap[edge.target] = (finalInboundReadRpsMap[edge.target] ?? 0) + finalEdgeRead;
+      finalInboundWriteRpsMap[edge.target] = (finalInboundWriteRpsMap[edge.target] ?? 0) + finalEdgeWrite;
+
       if (!visited2.has(edge.target)) queue2.push(edge.target);
     }
   }
@@ -246,6 +320,8 @@ export function runSimulationTick(
 
       updatedMetrics[node.id] = {
         inboundRps: 0,
+        inboundReadRps: 0,
+        inboundWriteRps: 0,
         outboundRps: 0,
         cpuPct: 10,
         ramPct: 20,
@@ -273,6 +349,8 @@ export function runSimulationTick(
     }
 
     const inbound = finalInboundRpsMap[node.id] ?? 0;
+    const inboundRead = finalInboundReadRpsMap[node.id] ?? 0;
+    const inboundWrite = finalInboundWriteRpsMap[node.id] ?? 0;
     const effectiveMaxRps = (cfg.maxRps ?? 0) * (cfg.replicas ?? 1);
 
     const utilization = effectiveMaxRps > 0 ? clamp(inbound / effectiveMaxRps, 0, 2) : 0;
@@ -294,7 +372,6 @@ export function runSimulationTick(
         queueDepth = prevQueue + queueChange;
       } else {
         // Capacity freed: drain backlog at excessCapacity per tick
-        // This is bounded naturally: can't drain more than exists
         const excessCapacity = effectiveMaxRps - inbound;
         queueDepth = Math.max(0, prevQueue - excessCapacity);
       }
@@ -304,12 +381,9 @@ export function runSimulationTick(
 
       // Proportional expiry: each tick, requests whose implied wait exceeds
       // timeoutMs are shed from the back of the queue as timeout errors.
-      // queuingDelay = queueDepth / serviceRate * 1000 (ms)
-      // The "safe" window that won't timeout = timeoutMs * serviceRate / 1000
       if (effectiveMaxRps > 0) {
         const safeSlots = (nodeTimeoutMs / 1000) * effectiveMaxRps;
         if (queueDepth > safeSlots) {
-          // Only expire a fraction per tick so the decay is visible over several ticks
           const expiredThisTick = (queueDepth - safeSlots) * 0.4;
           queueTimeouts = Math.round(expiredThisTick);
           queueDepth = queueDepth - expiredThisTick;
@@ -322,28 +396,42 @@ export function runSimulationTick(
     const queuingDelayMs = (queueDepth > 0 && effectiveMaxRps > 0) ? (queueDepth / effectiveMaxRps) * 1000 : 0;
     const latencyMs = def.baseLatencyMs * (1 + overloadFactor * 3) + queuingDelayMs;
 
-    // Storage growth
+    // Storage growth (DISK size grows ONLY based on write operations)
     const prevStoragePct = prevMetrics?.storagePct ?? 0;
     let storagePct = prevStoragePct;
     if (def.accumulatesStorage && cfg.storageGb && cfg.storageGb > 0) {
-      const storageGrowthPerTick = (inbound * 0.0001) / cfg.storageGb;
+      const storageGrowthPerTick = (inboundWrite * 0.0002) / cfg.storageGb;
       storagePct = clamp(prevStoragePct + storageGrowthPerTick, 0, 100);
     }
 
-    // Determine outbound RPS
+    // Determine outbound RPS (distinguishing reads and writes for cache bypass)
     const outboundTargets = outboundEdges[node.id] ?? [];
-    let outboundRps: number;
-    if (cfg.cacheHitRate !== undefined) {
-      outboundRps = inbound * (1 - cfg.cacheHitRate);
-    } else if (def.isSink) {
-      outboundRps = 0;
+    let outboundRead: number;
+    let outboundWrite: number;
+
+    if (def.isSink) {
+      outboundRead = 0;
+      outboundWrite = 0;
     } else {
-      if (cfg.rateLimiterEnabled) {
-        outboundRps = Math.min(inbound, effectiveMaxRps);
+      if (cfg.cacheHitRate !== undefined) {
+        outboundRead = inboundRead * (1 - cfg.cacheHitRate);
+        outboundWrite = inboundWrite; // Write Bypass
       } else {
-        outboundRps = inbound;
+        outboundRead = inboundRead;
+        outboundWrite = inboundWrite;
+      }
+
+      if (cfg.rateLimiterEnabled) {
+        const totalOutRaw = outboundRead + outboundWrite;
+        if (totalOutRaw > effectiveMaxRps && totalOutRaw > 0) {
+          const scale = effectiveMaxRps / totalOutRaw;
+          outboundRead *= scale;
+          outboundWrite *= scale;
+        }
       }
     }
+
+    let outboundRps = outboundRead + outboundWrite;
     if (outboundTargets.length === 0) outboundRps = 0;
 
     // Crash and failover check:
@@ -379,6 +467,8 @@ export function runSimulationTick(
 
     updatedMetrics[node.id] = {
       inboundRps: Math.round(inbound),
+      inboundReadRps: Math.round(inboundRead),
+      inboundWriteRps: Math.round(inboundWrite),
       outboundRps: Math.round(outboundRps),
       cpuPct: Math.round(cpuPct),
       ramPct: Math.round(ramPct),
@@ -518,6 +608,8 @@ export function runSimulationTick(
 
     updatedEdgeMetrics[edge.id] = {
       rps: Math.round(edgeRps),
+      readRps: Math.round(edgeReadRpsMap[edge.id] ?? 0),
+      writeRps: Math.round(edgeWriteRpsMap[edge.id] ?? 0),
       queueSize: Math.round(queueSize * 10) / 10,
       latencyMs: Math.round((targetLatency + waitTime) * 10) / 10,
       timeoutsPerSecond: Math.round(timeouts * 10) / 10,

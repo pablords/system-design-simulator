@@ -102,6 +102,9 @@ export const ConfigPanel: React.FC = () => {
             {config.timeoutMs !== undefined && (
               <Slider label="Timeout" value={config.timeoutMs} min={50} max={10000} step={50} unit=" ms" onChange={(v) => update('timeoutMs', v)} />
             )}
+            {config.writeRatio !== undefined && (
+              <Slider label="Write Ratio (Carga Escrita)" value={Math.round(config.writeRatio * 100)} min={0} max={100} step={5} unit="%" onChange={(v) => update('writeRatio', v / 100)} />
+            )}
             {!def.isSource && !def.isSink && config.maxRps !== undefined && (
               <div className="config-field" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, padding: '4px 0' }}>
                 <span className="config-label">Semáforo (Rate Limiter)</span>
@@ -162,7 +165,14 @@ export const ConfigPanel: React.FC = () => {
               <div className="metric-card">
                 <Users size={14} className="metric-card-icon" />
                 <span className="metric-card-label">Inbound RPS</span>
-                <span className="metric-card-value">{metrics.inboundRps.toLocaleString()}</span>
+                <span className="metric-card-value">
+                  {metrics.inboundRps.toLocaleString()}
+                  {(metrics.inboundReadRps !== undefined || metrics.inboundWriteRps !== undefined) && (
+                    <span style={{ fontSize: 9, display: 'block', color: 'var(--text-muted)', fontWeight: 400, marginTop: 2 }}>
+                      R: {Math.round(metrics.inboundReadRps ?? 0)} | W: {Math.round(metrics.inboundWriteRps ?? 0)}
+                    </span>
+                  )}
+                </span>
               </div>
               {config.cpuCores !== undefined && (
                 <div className="metric-card">

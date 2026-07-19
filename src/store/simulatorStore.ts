@@ -40,6 +40,7 @@ interface SimulatorStore {
   removeNode: (id: string) => void;
   selectNode: (id: string | null) => void;
   updateNodeConfig: (id: string, config: Partial<ComponentConfig>) => void;
+  updateEdgeData: (id: string, dataUpdate: Record<string, any>) => void;
 
   // Actions - Simulation
   startSimulation: () => void;
@@ -131,6 +132,14 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
         n.id === id
           ? { ...n, data: { ...n.data, config: { ...n.data.config, ...configUpdate } } }
           : n
+      ),
+    }));
+  },
+
+  updateEdgeData: (id, dataUpdate) => {
+    set((state) => ({
+      edges: state.edges.map((e) =>
+        e.id === id ? { ...e, data: { ...(e.data || {}), ...dataUpdate } } : e
       ),
     }));
   },

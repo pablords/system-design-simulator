@@ -62,10 +62,13 @@ export interface ComponentConfig {
   connectionPool?: number; // max concurrent connections (e.g. for database, cache)
   timeoutMs?: number;      // source request timeout limit
   rateLimiterEnabled?: boolean; // semaphore / rate limiter active
+  writeRatio?: number;     // 0-1, write ratio of generated traffic (sources only)
 }
 
 export interface EdgeMetrics {
   rps: number;
+  readRps?: number;  // read component of traffic
+  writeRps?: number; // write component of traffic
   queueSize: number;
   latencyMs: number;
   timeoutsPerSecond: number;
@@ -74,10 +77,13 @@ export interface EdgeMetrics {
 
 export interface SimulatorEdgeData extends Record<string, unknown> {
   metrics?: EdgeMetrics;
+  trafficType?: 'all' | 'read' | 'write';
 }
 
 export interface NodeMetrics {
   inboundRps: number;
+  inboundReadRps?: number;  // read component of inbound traffic
+  inboundWriteRps?: number; // write component of inbound traffic
   outboundRps: number;
   cpuPct: number;
   ramPct: number;
