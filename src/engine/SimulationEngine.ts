@@ -97,7 +97,6 @@ export function runSimulationTick(
     if (!currentNode) continue;
 
     const def = COMPONENT_DEFINITIONS[currentNode.data.componentType];
-    const inbound = inboundRpsMap[currentId] ?? 0;
     const inboundRead = inboundReadRpsMap[currentId] ?? 0;
     const inboundWrite = inboundWriteRpsMap[currentId] ?? 0;
     const effectiveMaxRps = (currentNode.data.config.maxRps ?? 0) * (currentNode.data.config.replicas ?? 1);
