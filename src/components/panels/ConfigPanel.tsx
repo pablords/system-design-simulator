@@ -14,10 +14,34 @@ const Slider: React.FC<{
   unit: string;
   onChange: (v: number) => void;
 }> = ({ label, value, min, max, step, unit, onChange }) => {
-  const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [tempValue, setTempValue] = React.useState(String(value));
+
+  React.useEffect(() => {
+    setTempValue(String(value));
+  }, [value]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTempValue(e.target.value);
     const val = Number(e.target.value);
-    if (!isNaN(val)) {
-      onChange(Math.max(min, Math.min(max, val)));
+    if (!isNaN(val) && e.target.value !== '' && val >= min && val <= max) {
+      onChange(val);
+    }
+  };
+
+  const handleBlurOrEnter = () => {
+    let val = Number(tempValue);
+    if (isNaN(val) || tempValue === '') {
+      val = value;
+    }
+    const clampedVal = Math.max(min, Math.min(max, val));
+    onChange(clampedVal);
+    setTempValue(String(clampedVal));
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleBlurOrEnter();
+      e.currentTarget.blur();
     }
   };
 
@@ -31,8 +55,10 @@ const Slider: React.FC<{
             min={min}
             max={max}
             step={step}
-            value={value}
-            onChange={handleNumberChange}
+            value={tempValue}
+            onChange={handleInputChange}
+            onBlur={handleBlurOrEnter}
+            onKeyDown={handleKeyDown}
             style={{
               width: '64px',
               padding: '2px 6px',

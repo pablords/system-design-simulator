@@ -12,6 +12,29 @@ interface ToolbarProps {
 export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen, onTogglePalette }) => {
   const { simulation, startSimulation, pauseSimulation, resetSimulation, setSimulationSpeed, clearCanvas, loadPreset, setGlobalTrafficScale } = useSimulatorStore();
   const [showPresets, setShowPresets] = useState(false);
+  const [tempGlobalLoad, setTempGlobalLoad] = useState(String(simulation.globalTrafficScale ?? 100));
+
+  React.useEffect(() => {
+    setTempGlobalLoad(String(simulation.globalTrafficScale ?? 100));
+  }, [simulation.globalTrafficScale]);
+
+  const handleGlobalLoadChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTempGlobalLoad(e.target.value);
+    const val = Number(e.target.value);
+    if (!isNaN(val) && e.target.value !== '' && val >= 0 && val <= 500) {
+      setGlobalTrafficScale(val);
+    }
+  };
+
+  const handleGlobalLoadBlurOrEnter = () => {
+    let val = Number(tempGlobalLoad);
+    if (isNaN(val) || tempGlobalLoad === '') {
+      val = simulation.globalTrafficScale ?? 100;
+    }
+    const clampedVal = Math.max(0, Math.min(500, val));
+    setGlobalTrafficScale(clampedVal);
+    setTempGlobalLoad(String(clampedVal));
+  };
 
   const speedOptions = [
     { value: 'slow', label: '0.5×' },
@@ -84,11 +107,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen,
               min={0}
               max={500}
               step={10}
-              value={simulation.globalTrafficScale ?? 100}
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                if (!isNaN(val)) {
-                  setGlobalTrafficScale(Math.max(0, Math.min(500, val)));
+              value={tempGlobalLoad}
+              onChange={handleGlobalLoadChange}
+              onBlur={handleGlobalLoadBlurOrEnter}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleGlobalLoadBlurOrEnter();
+                  e.currentTarget.blur();
                 }
               }}
               style={{
