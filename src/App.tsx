@@ -13,15 +13,15 @@ function App() {
   const [showLoad, setShowLoad] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(true);
   const [showCalculator, setShowCalculator] = useState(false);
-  const { selectedNodeId } = useSimulatorStore();
+  const { selectedNodeId, selectedEdgeId } = useSimulatorStore();
 
-  // On tablets/mobile, if a node is selected, close the calculator and palette to avoid layout clutter
+  // On tablets/mobile, if a node or edge is selected, close the calculator and palette to avoid layout clutter
   useEffect(() => {
-    if (selectedNodeId && window.innerWidth <= 1200) {
+    if ((selectedNodeId || selectedEdgeId) && window.innerWidth <= 1200) {
       setShowCalculator(false);
       setIsPaletteOpen(false);
     }
-  }, [selectedNodeId]);
+  }, [selectedNodeId, selectedEdgeId]);
 
   const handleTogglePalette = () => {
     const nextVal = !isPaletteOpen;
@@ -59,7 +59,7 @@ function App() {
           <MetricsPanel />
         </main>
 
-        {selectedNodeId && <ConfigPanel />}
+        {(selectedNodeId || selectedEdgeId) && <ConfigPanel />}
       </div>
 
       {showSave && <SaveDialog onClose={() => setShowSave(false)} />}

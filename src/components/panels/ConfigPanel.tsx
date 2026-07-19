@@ -1,9 +1,10 @@
 import React from 'react';
-import { X, Server, Cpu, HardDrive, Zap, Users, Clock, Activity, Layers } from 'lucide-react';
+import { X, Server, Cpu, HardDrive, Zap, Users, Clock, Activity, Layers, Trash, Radio } from 'lucide-react';
 import { useSimulatorStore } from '../../store/simulatorStore';
 import { COMPONENT_DEFINITIONS } from '../../engine/models/ComponentModel';
 import { LineChart, Line, ResponsiveContainer, Tooltip, YAxis } from 'recharts';
 import { ServiceIcon } from '../ui/ServiceIcon';
+import type { EdgeMetrics } from '../../types';
 
 const Slider: React.FC<{
   label: string;
@@ -92,17 +93,228 @@ const Slider: React.FC<{
 };
 
 export const ConfigPanel: React.FC = () => {
-  const { selectedNodeId, nodes, edges, updateNodeConfig, selectNode, connectNodes, disconnectNodes } = useSimulatorStore();
+  const {
+    selectedNodeId,
+    selectedEdgeId,
+    nodes,
+    edges,
+    updateNodeConfig,
+    updateEdgeData,
+    selectNode,
+    selectEdge,
+    connectNodes,
+    disconnectNodes,
+  } = useSimulatorStore();
+
   const node = nodes.find((n) => n.id === selectedNodeId);
+  const edge = edges.find((e) => e.id === selectedEdgeId);
+
+  const update = (key: string, value: number | string | boolean) => {
+    if (node) updateNodeConfig(node.id, { [key]: value });
+  };
+
+  if (!node && edge) {
+    const sourceNode = nodes.find((n) => n.id === edge.source);
+    const targetNode = nodes.find((n) => n.id === edge.target);
+    const sourceLabel = sourceNode?.data.config.label || sourceNode?.id || 'Origem';
+    const targetLabel = targetNode?.data.config.label || targetNode?.id || 'Destino';
+    const metrics = edge.data?.metrics as EdgeMetrics | undefined;
+    const trafficType = (edge.data?.trafficType as 'all' | 'read' | 'write') ?? 'all';
+    const networkLatency = (edge.data?.networkLatencyMs as number) ?? 0;
+    const connectionLabel = (edge.data?.label as string) ?? '';
+
+    const updateEdge = (key: string, value: any) => {
+      updateEdgeData(edge.id, { [key]: value });
+    };
+
+    const PRESETS = [
+      { name: 'LAN / Same AZ', value: 1, desc: 'Datacenter local (0.5ms - 1ms)' },
+      { name: 'Cross-AZ (VPC)', value: 2.5, desc: 'Diferentes zonas de disponibilidade' },
+      { name: 'Cross-Region (WAN)', value: 15, desc: 'Mesmo continente (ex: Virgínia a Ohio)' },
+      { name: 'Intercontinental', value: 120, desc: 'Longa distância (ex: EUA a Brasil)' },
+      { name: 'Public Internet (Fiber)', value: 25, desc: 'Banda larga fixa residencial' },
+      { name: 'Mobile 4G/5G Network', value: 50, desc: 'Última milha de telefonia celular' },
+    ];
+
+    const handleDeleteEdge = () => {
+      disconnectNodes(edge.source, edge.target);
+      selectEdge(null);
+    };
+
+    return (
+      <aside className="config-panel">
+        <div className="config-header">
+          <div className="config-header-left">
+            <span style={{ fontSize: '24px', marginRight: '8px' }}>🔗</span>
+            <div>
+              <div className="config-node-type">Conexão de Rede</div>
+              <div className="config-node-desc">Link entre {sourceLabel} e {targetLabel}</div>
+            </div>
+          </div>
+          <button className="config-close-btn" onClick={() => selectEdge(null)}>
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="config-body">
+          <div className="config-field">
+            <label className="config-label">Nome da Conexão</label>
+            <input
+              type="text"
+              placeholder="Ex: Conexão WAN, Link DB..."
+              value={connectionLabel}
+              onChange={(e) => updateEdge('label', e.target.value)}
+              className="config-input"
+            />
+          </div>
+
+          <div className="config-section-title">
+            <Layers size={14} /> Filtro de Tráfego
+          </div>
+          <div className="config-field">
+            <label className="config-label" style={{ marginBottom: '4px' }}>Direcionamento do Fluxo</label>
+            <select
+              value={trafficType}
+              onChange={(e) => updateEdge('trafficType', e.target.value)}
+              className="config-input"
+              style={{ background: '#192231', border: '1px solid #334155', borderRadius: '4px', color: '#fff' }}
+            >
+              <option value="all">🔄 Leitura & Escrita (Tudo)</option>
+              <option value="read">📖 Apenas Leitura (Read Query)</option>
+              <option value="write">✍️ Apenas Escrita (Write Command)</option>
+            </select>
+          </div>
+
+          <div className="config-section-title">
+            <Radio size={14} /> Presets de Latência (RTT)
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {PRESETS.map((p) => (
+              <button
+                key={p.name}
+                onClick={() => updateEdge('networkLatencyMs', p.value)}
+                style={{
+                  textAlign: 'left',
+                  padding: '8px 10px',
+                  background: networkLatency === p.value ? 'rgba(56, 189, 248, 0.15)' : '#131c2a',
+                  border: '1px solid',
+                  borderColor: networkLatency === p.value ? '#38bdf8' : '#1e293b',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  color: '#fff',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <div style={{ fontSize: '11px', fontWeight: 600, color: networkLatency === p.value ? '#38bdf8' : '#ffffff' }}>
+                  {p.name} ({p.value}ms)
+                </div>
+                <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  {p.desc}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <Slider
+            label="Latência de Rede Customizada"
+            value={networkLatency}
+            min={0}
+            max={500}
+            step={networkLatency < 10 ? 0.5 : 5}
+            unit=" ms"
+            onChange={(v) => updateEdge('networkLatencyMs', v)}
+          />
+
+          {metrics && (
+            <>
+              <div className="config-section-title">
+                <Activity size={14} /> Métricas da Conexão
+              </div>
+              <div className="metrics-grid">
+                <div className="metric-card">
+                  <Users size={14} className="metric-card-icon" />
+                  <span className="metric-card-label">RPS Tráfego</span>
+                  <span className="metric-card-value">
+                    {metrics.rps.toLocaleString()}
+                    {(metrics.readRps !== undefined || metrics.writeRps !== undefined) && (
+                      <span style={{ fontSize: 9, display: 'block', color: 'var(--text-muted)', fontWeight: 400, marginTop: 2 }}>
+                        R: {Math.round(metrics.readRps ?? 0)} | W: {Math.round(metrics.writeRps ?? 0)}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="metric-card">
+                  <Clock size={14} className="metric-card-icon" style={{ color: '#818cf8' }} />
+                  <span className="metric-card-label">Latência Total</span>
+                  <span className="metric-card-value">{metrics.latencyMs}ms</span>
+                </div>
+                <div className="metric-card">
+                  <Radio size={14} className="metric-card-icon" style={{ color: '#38bdf8' }} />
+                  <span className="metric-card-label">Atraso Rede</span>
+                  <span className="metric-card-value">{networkLatency}ms</span>
+                </div>
+                {metrics.queueWaitTimeMs !== undefined && metrics.queueWaitTimeMs > 0 && (
+                  <div className="metric-card warning">
+                    <Clock size={14} className="metric-card-icon" />
+                    <span className="metric-card-label">Tempo Fila DB</span>
+                    <span className="metric-card-value">{metrics.queueWaitTimeMs}ms</span>
+                  </div>
+                )}
+                {metrics.timeoutsPerSecond > 0 && (
+                  <div className="metric-card critical">
+                    <Clock size={14} className="metric-card-icon" />
+                    <span className="metric-card-label">Timeouts / s</span>
+                    <span className="metric-card-value">{metrics.timeoutsPerSecond}</span>
+                  </div>
+                )}
+                {metrics.failuresPerSecond !== undefined && metrics.failuresPerSecond > 0 && (
+                  <div className="metric-card critical">
+                    <Clock size={14} className="metric-card-icon" />
+                    <span className="metric-card-label">Erros / s</span>
+                    <span className="metric-card-value">{metrics.failuresPerSecond}</span>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          <button
+            onClick={handleDeleteEdge}
+            style={{
+              marginTop: '16px',
+              padding: '10px 14px',
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid #ef4444',
+              borderRadius: '6px',
+              color: '#fca5a5',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              fontSize: '12px',
+              fontWeight: 500,
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+            }}
+          >
+            <Trash size={14} />
+            <span>Excluir Conexão</span>
+          </button>
+        </div>
+      </aside>
+    );
+  }
 
   if (!node) return null;
 
   const def = COMPONENT_DEFINITIONS[node.data.componentType];
   const { config, metrics } = node.data;
-
-  const update = (key: string, value: number | string | boolean) => {
-    updateNodeConfig(node.id, { [key]: value });
-  };
 
   const generateSpans = () => {
     interface TraceSpan {
@@ -129,7 +341,7 @@ export const ConfigPanel: React.FC = () => {
       const currCfg = currNode.data.config;
 
       const isError = currMetrics.cbState === 'OPEN' || (currMetrics.failedRps ?? 0) > ((currMetrics.inboundRps ?? 0) * 0.1) || currMetrics.status === 'critical';
-      const nodeLatency = currMetrics.latencyMs || 1;
+      const nodeLatency = currMetrics.latencyMs || 0.1;
 
       const nodeOutEdges = edges.filter((e) => e.source === nodeId);
       const nextOffset = currentOffset + nodeLatency;
@@ -138,15 +350,19 @@ export const ConfigPanel: React.FC = () => {
       let sequentialOffset = nextOffset;
 
       for (const edge of nodeOutEdges) {
-        const edgeWait = (edge.data?.metrics as any)?.latencyMs ?? 0;
+        const edgeMetrics = edge.data?.metrics as any;
+        const edgeWait = edgeMetrics?.queueWaitTimeMs ?? 0;
+        const edgeNetwork = (edge.data?.networkLatencyMs as number) ?? 0;
+        const connectionDelay = edgeWait + edgeNetwork;
+
         const targetId = edge.target;
-        
         const callStart = sequentialOffset;
-        buildTrace(targetId, callStart + edgeWait, depth + 1);
+        
+        buildTrace(targetId, callStart + connectionDelay, depth + 1);
         
         const targetNodeMetrics = nodes.find((n) => n.id === targetId)?.data.metrics;
-        const targetLatency = targetNodeMetrics?.latencyMs ?? 0;
-        const childTotalDuration = edgeWait + (targetNodeMetrics?.endToEndLatencyMs ?? targetLatency);
+        const targetE2E = targetNodeMetrics?.endToEndLatencyMs ?? targetNodeMetrics?.latencyMs ?? 0;
+        const childTotalDuration = connectionDelay + targetE2E;
         
         sequentialOffset += childTotalDuration;
         maxChildDuration = Math.max(maxChildDuration, (callStart - nextOffset) + childTotalDuration);
@@ -251,6 +467,9 @@ export const ConfigPanel: React.FC = () => {
             )}
             {config.writeRatio !== undefined && (
               <Slider label="Write Ratio (Carga Escrita)" value={Math.round(config.writeRatio * 100)} min={0} max={100} step={5} unit="%" onChange={(v) => update('writeRatio', v / 100)} />
+            )}
+            {def.isSource && config.clientLatencyMs !== undefined && (
+              <Slider label="Ping do Cliente (Last-Mile)" value={config.clientLatencyMs} min={0} max={250} step={5} unit=" ms" onChange={(v) => update('clientLatencyMs', v)} />
             )}
             {!def.isSource && !def.isSink && config.maxRps !== undefined && (
               <div className="config-field" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, padding: '4px 0' }}>

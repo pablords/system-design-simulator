@@ -68,6 +68,7 @@ export interface ComponentConfig {
   circuitBreakerEnabled?: boolean; // CB enabled
   cbFailureThreshold?: number;     // failure rate threshold (0 to 1)
   cbSleepWindowTicks?: number;     // ticks in OPEN before going HALF-OPEN
+  clientLatencyMs?: number;      // Latency of last-mile/client ping
 }
 
 export interface EdgeMetrics {
@@ -79,11 +80,14 @@ export interface EdgeMetrics {
   timeoutsPerSecond: number;
   failuresPerSecond?: number; // failed requests per second on edge
   status: 'ok' | 'warning' | 'critical';
+  queueWaitTimeMs?: number;   // Time spent in queue before target processing
 }
 
 export interface SimulatorEdgeData extends Record<string, unknown> {
   metrics?: EdgeMetrics;
   trafficType?: 'all' | 'read' | 'write';
+  networkLatencyMs?: number;  // Network transit delay (RTT) in ms
+  label?: string;             // Friendly name for connection
 }
 
 export interface NodeMetrics {

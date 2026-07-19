@@ -17,7 +17,8 @@ export const ConnectionEdge: React.FC<EdgeProps> = ({
   markerEnd,
   data,
 }) => {
-  const { updateEdgeData } = useSimulatorStore();
+  const { updateEdgeData, selectedEdgeId, selectEdge } = useSimulatorStore();
+  const isSelected = id === selectedEdgeId;
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -56,6 +57,11 @@ export const ConnectionEdge: React.FC<EdgeProps> = ({
       strokeWidth = 3;
     }
 
+    if (isSelected) {
+      strokeColor = '#38bdf8'; // Sky blue selection color
+      strokeWidth = Math.max(strokeWidth + 1.5, 4);
+    }
+
     return {
       ...baseStyle,
       stroke: strokeColor,
@@ -81,7 +87,11 @@ export const ConnectionEdge: React.FC<EdgeProps> = ({
       <BaseEdge path={edgePath} markerEnd={markerEnd} style={getEdgeStyle()} />
       <EdgeLabelRenderer>
         <div
-          className={`edge-label-badge status-${status}`}
+          className={`edge-label-badge status-${status} ${isSelected ? 'selected' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            selectEdge(id);
+          }}
           style={{
             position: 'absolute',
             transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
@@ -89,6 +99,10 @@ export const ConnectionEdge: React.FC<EdgeProps> = ({
             display: 'flex',
             alignItems: 'center',
             gap: '2px',
+            border: isSelected ? '1.5px solid #38bdf8' : undefined,
+            boxShadow: isSelected ? '0 0 10px rgba(56, 189, 248, 0.5)' : undefined,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
           }}
         >
           {/* Traffic filter click toggle */}

@@ -473,7 +473,8 @@ export function runSimulationTick(
 
     // Realistic queuing delay: W = L / lambda (Little's Law)
     const queuingDelayMs = (queueDepth > 0 && effectiveMaxRps > 0) ? (queueDepth / effectiveMaxRps) * 1000 : 0;
-    const latencyMs = def.baseLatencyMs * (1 + overloadFactor * 3) + queuingDelayMs;
+    const baseLatency = (def.isSource && cfg.clientLatencyMs !== undefined) ? cfg.clientLatencyMs : def.baseLatencyMs;
+    const latencyMs = baseLatency * (1 + overloadFactor * 3) + queuingDelayMs;
 
     // Storage growth (DISK size grows ONLY based on write operations)
     const prevStoragePct = prevMetrics?.storagePct ?? 0;
@@ -688,8 +689,9 @@ export function runSimulationTick(
     for (const edge of targets) {
       const edgeRps = edgeRpsMap[edge.id] ?? 0;
       const waitTime = edgeWaitTimeMap[edge.id] ?? 0;
+      const edgeNetworkLatency = (edge.data?.networkLatencyMs as number) ?? 0;
       const targetE2E = getE2ELatency(edge.target);
-      weightedLatencySum += edgeRps * (waitTime + targetE2E);
+      weightedLatencySum += edgeRps * (waitTime + edgeNetworkLatency + targetE2E);
       totalTargetRps += edgeRps;
     }
 
@@ -821,15 +823,18 @@ export function runSimulationTick(
       });
     }
 
+    const edgeNetworkLatency = (edge.data?.networkLatencyMs as number) ?? 0;
+
     updatedEdgeMetrics[edge.id] = {
       rps: Math.round(edgeRps),
       readRps: Math.round(edgeReadRpsMap[edge.id] ?? 0),
       writeRps: Math.round(edgeWriteRpsMap[edge.id] ?? 0),
       queueSize: Math.round(queueSize * 10) / 10,
-      latencyMs: Math.round((targetLatency + waitTime) * 10) / 10,
+      latencyMs: Math.round((targetLatency + waitTime + edgeNetworkLatency) * 10) / 10,
       timeoutsPerSecond: Math.round(timeouts * 10) / 10,
       failuresPerSecond: Math.round(totalEdgeFailures * 10) / 10,
       status,
+      queueWaitTimeMs: Math.round(waitTime * 10) / 10,
     };
   }
 

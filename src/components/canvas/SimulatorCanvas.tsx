@@ -20,7 +20,7 @@ const nodeTypes = { simulatorNode: ComponentNode };
 const edgeTypes = { connectionEdge: ConnectionEdge };
 
 const CanvasInner: React.FC = () => {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, selectNode, showMinimap, toggleMinimap } = useSimulatorStore();
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, selectNode, selectEdge, showMinimap, toggleMinimap } = useSimulatorStore();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
 
@@ -43,7 +43,16 @@ const CanvasInner: React.FC = () => {
 
   const onPaneClick = useCallback(() => {
     selectNode(null);
+    selectEdge(null);
+  }, [selectNode, selectEdge]);
+
+  const onNodeClick = useCallback((_: React.MouseEvent, node: any) => {
+    selectNode(node.id);
   }, [selectNode]);
+
+  const onEdgeClick = useCallback((_: React.MouseEvent, edge: any) => {
+    selectEdge(edge.id);
+  }, [selectEdge]);
 
   return (
     <div ref={reactFlowWrapper} className="canvas-wrapper" onDragOver={onDragOver} onDrop={onDrop}>
@@ -54,6 +63,8 @@ const CanvasInner: React.FC = () => {
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onPaneClick={onPaneClick}
+        onNodeClick={onNodeClick}
+        onEdgeClick={onEdgeClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView

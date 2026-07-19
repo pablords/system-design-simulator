@@ -28,6 +28,7 @@ interface SimulatorStore {
 
   // Selection
   selectedNodeId: string | null;
+  selectedEdgeId: string | null;
 
   // Simulation
   simulation: SimulationState;
@@ -42,6 +43,7 @@ interface SimulatorStore {
   addNode: (type: ComponentType, position: { x: number; y: number }) => void;
   removeNode: (id: string) => void;
   selectNode: (id: string | null) => void;
+  selectEdge: (id: string | null) => void;
   updateNodeConfig: (id: string, config: Partial<ComponentConfig>) => void;
   updateEdgeData: (id: string, dataUpdate: Record<string, any>) => void;
 
@@ -81,6 +83,7 @@ export const useSimulatorStore = create<SimulatorStore>()(
   nodes: [],
   edges: [],
   selectedNodeId: null,
+  selectedEdgeId: null,
   simulationIntervalId: null,
   showMinimap: true,
   toggleMinimap: () => set((state) => ({ showMinimap: !state.showMinimap })),
@@ -102,8 +105,26 @@ export const useSimulatorStore = create<SimulatorStore>()(
   },
 
   onConnect: (connection) => {
+    const { nodes } = get();
+    const sourceNode = nodes.find((n) => n.id === connection.source);
+    const targetNode = nodes.find((n) => n.id === connection.target);
+    const defaultLatency = sourceNode && targetNode
+      ? getDefaultNetworkLatency(sourceNode.data.componentType, targetNode.data.componentType)
+      : 0;
+
     set((state) => ({
-      edges: addEdge({ ...connection, type: 'connectionEdge', animated: true }, state.edges),
+      edges: addEdge(
+        {
+          ...connection,
+          type: 'connectionEdge',
+          animated: true,
+          data: {
+            networkLatencyMs: defaultLatency,
+            trafficType: 'all',
+          },
+        },
+        state.edges
+      ),
     }));
   },
 
@@ -111,11 +132,21 @@ export const useSimulatorStore = create<SimulatorStore>()(
     set((state) => {
       const exists = state.edges.some((e) => e.source === sourceId && e.target === targetId);
       if (exists) return {};
+      const sourceNode = state.nodes.find((n) => n.id === sourceId);
+      const targetNode = state.nodes.find((n) => n.id === targetId);
+      const defaultLatency = sourceNode && targetNode
+        ? getDefaultNetworkLatency(sourceNode.data.componentType, targetNode.data.componentType)
+        : 0;
+
       const newConnection = {
         source: sourceId,
         target: targetId,
         sourceHandle: 'source',
         targetHandle: 'target',
+        data: {
+          networkLatencyMs: defaultLatency,
+          trafficType: 'all',
+        },
       };
       return {
         edges: addEdge({ ...newConnection, type: 'connectionEdge', animated: true }, state.edges),
@@ -124,9 +155,15 @@ export const useSimulatorStore = create<SimulatorStore>()(
   },
 
   disconnectNodes: (sourceId, targetId) => {
-    set((state) => ({
-      edges: state.edges.filter((e) => !(e.source === sourceId && e.target === targetId)),
-    }));
+    set((state) => {
+      const selectedWasDeleted = state.edges.some(
+        (e) => e.source === sourceId && e.target === targetId && e.id === state.selectedEdgeId
+      );
+      return {
+        edges: state.edges.filter((e) => !(e.source === sourceId && e.target === targetId)),
+        selectedEdgeId: selectedWasDeleted ? null : state.selectedEdgeId,
+      };
+    });
   },
 
   addNode: (type, position) => {
@@ -156,15 +193,27 @@ export const useSimulatorStore = create<SimulatorStore>()(
   },
 
   removeNode: (id) => {
-    set((state) => ({
-      nodes: state.nodes.filter((n) => n.id !== id),
-      edges: state.edges.filter((e) => e.source !== id && e.target !== id),
-      selectedNodeId: state.selectedNodeId === id ? null : state.selectedNodeId,
-    }));
+    set((state) => {
+      const remainingEdges = state.edges.filter((e) => e.source !== id && e.target !== id);
+      const isSelectedEdgeDeleted = state.selectedEdgeId 
+        ? !remainingEdges.some((e) => e.id === state.selectedEdgeId)
+        : false;
+
+      return {
+        nodes: state.nodes.filter((n) => n.id !== id),
+        edges: remainingEdges,
+        selectedNodeId: state.selectedNodeId === id ? null : state.selectedNodeId,
+        selectedEdgeId: isSelectedEdgeDeleted ? null : state.selectedEdgeId,
+      };
+    });
   },
 
   selectNode: (id) => {
-    set({ selectedNodeId: id });
+    set({ selectedNodeId: id, selectedEdgeId: null });
+  },
+
+  selectEdge: (id) => {
+    set({ selectedEdgeId: id, selectedNodeId: null });
   },
 
   updateNodeConfig: (id, configUpdate) => {
@@ -295,6 +344,7 @@ export const useSimulatorStore = create<SimulatorStore>()(
       edges: scenario.edges as Edge[],
       simulation: { running: false, tick: 0, speed: 'normal', totalRps: 0, bottlenecks: [], globalTrafficScale: 100 },
       selectedNodeId: null,
+      selectedEdgeId: null,
     });
   },
 
@@ -318,6 +368,7 @@ export const useSimulatorStore = create<SimulatorStore>()(
       nodes: [],
       edges: [],
       selectedNodeId: null,
+      selectedEdgeId: null,
       simulation: { running: false, tick: 0, speed: 'normal', totalRps: 0, bottlenecks: [], globalTrafficScale: 100 },
     });
   },
@@ -364,6 +415,19 @@ export const useSimulatorStore = create<SimulatorStore>()(
   )
 );
 
+function getDefaultNetworkLatency(sourceType: ComponentType, targetType: ComponentType): number {
+  if (sourceType === 'client' || sourceType === 'mobile') {
+    if (targetType === 'cdn') return 15; // Proximidade com Edge CDN
+    return 35; // RTT médio Internet -> Datacenter
+  }
+  if (targetType === 'cdn') return 15;
+  if (sourceType === 'app-server' && targetType === 'cache') return 0.5; // Cache local na mesma AZ
+  if (targetType === 'sql-database' || targetType === 'nosql-db' || targetType === 'message-queue') {
+    return 2; // Comunicação Cross-AZ no Datacenter
+  }
+  return 1; // Padrão local intra-região
+}
+
 function buildPresets(): Record<string, { nodes: Node<SimulatorNodeData>[]; edges: Edge[] }> {
   const mkNode = (id: string, type: ComponentType, pos: { x: number; y: number }, configOverrides: Partial<ComponentConfig> = {}): Node<SimulatorNodeData> => {
     const def = COMPONENT_DEFINITIONS[type];
@@ -380,19 +444,23 @@ function buildPresets(): Record<string, { nodes: Node<SimulatorNodeData>[]; edge
     };
   };
 
-  const mkEdge = (id: string, source: string, target: string): Edge => ({
+  const mkEdge = (id: string, source: string, target: string, latencyMs: number = 0): Edge => ({
     id,
     source,
     target,
     type: 'connectionEdge',
     animated: true,
+    data: {
+      networkLatencyMs: latencyMs,
+      trafficType: 'all',
+    },
   });
 
   return {
     'ecommerce': {
       nodes: [
-        mkNode('wc1', 'client', { x: 100, y: 200 }, { maxRps: 5000, label: 'Web Users' }),
-        mkNode('mc1', 'mobile', { x: 100, y: 380 }, { maxRps: 3000, label: 'Mobile Users' }),
+        mkNode('wc1', 'client', { x: 100, y: 200 }, { maxRps: 5000, label: 'Web Users', clientLatencyMs: 20 }),
+        mkNode('mc1', 'mobile', { x: 100, y: 380 }, { maxRps: 3000, label: 'Mobile Users', clientLatencyMs: 40 }),
         mkNode('cdn1', 'cdn', { x: 320, y: 200 }, { label: 'CDN' }),
         mkNode('lb1', 'load-balancer', { x: 560, y: 280 }, { label: 'Load Balancer' }),
         mkNode('as1', 'app-server', { x: 800, y: 160 }, { replicas: 3, maxRps: 2000, label: 'Product API' }),
@@ -403,20 +471,20 @@ function buildPresets(): Record<string, { nodes: Node<SimulatorNodeData>[]; edge
         mkNode('mq1', 'message-queue', { x: 800, y: 540 }, { label: 'Order Events' }),
       ],
       edges: [
-        mkEdge('e1', 'wc1', 'cdn1'),
-        mkEdge('e2', 'mc1', 'lb1'),
-        mkEdge('e3', 'cdn1', 'lb1'),
-        mkEdge('e4', 'lb1', 'as1'),
-        mkEdge('e5', 'lb1', 'as2'),
-        mkEdge('e6', 'as1', 'rc1'),
-        mkEdge('e7', 'rc1', 'db1'),
-        mkEdge('e8', 'as2', 'db2'),
-        mkEdge('e9', 'as2', 'mq1'),
+        mkEdge('e1', 'wc1', 'cdn1', 15),
+        mkEdge('e2', 'mc1', 'lb1', 35),
+        mkEdge('e3', 'cdn1', 'lb1', 10),
+        mkEdge('e4', 'lb1', 'as1', 1.5),
+        mkEdge('e5', 'lb1', 'as2', 1.5),
+        mkEdge('e6', 'as1', 'rc1', 0.5),
+        mkEdge('e7', 'rc1', 'db1', 1),
+        mkEdge('e8', 'as2', 'db2', 2),
+        mkEdge('e9', 'as2', 'mq1', 2),
       ],
     },
     'streaming': {
       nodes: [
-        mkNode('wc1', 'client', { x: 80, y: 200 }, { maxRps: 20000, label: 'Viewers' }),
+        mkNode('wc1', 'client', { x: 80, y: 200 }, { maxRps: 20000, label: 'Viewers', clientLatencyMs: 25 }),
         mkNode('cdn1', 'cdn', { x: 320, y: 200 }, { label: 'Video CDN', cacheHitRate: 0.95 }),
         mkNode('ag1', 'api-gateway', { x: 560, y: 200 }, { label: 'API Gateway' }),
         mkNode('ms1', 'auth-service', { x: 800, y: 120 }, { label: 'Auth Service' }),
@@ -428,30 +496,30 @@ function buildPresets(): Record<string, { nodes: Node<SimulatorNodeData>[]; edge
         mkNode('ts1', 'nosql-db', { x: 1040, y: 700 }, { label: 'Analytics DB' }),
       ],
       edges: [
-        mkEdge('e1', 'wc1', 'cdn1'),
-        mkEdge('e2', 'cdn1', 'ag1'),
-        mkEdge('e3', 'ag1', 'ms1'),
-        mkEdge('e4', 'ag1', 'ms2'),
-        mkEdge('e5', 'ms1', 'rc1'),
-        mkEdge('e6', 'ms2', 'db1'),
-        mkEdge('e7', 'ms2', 'ob1'),
-        mkEdge('e8', 'ag1', 'mq1'),
-        mkEdge('e9', 'mq1', 'ts1'),
+        mkEdge('e1', 'wc1', 'cdn1', 25),
+        mkEdge('e2', 'cdn1', 'ag1', 10),
+        mkEdge('e3', 'ag1', 'ms1', 1.5),
+        mkEdge('e4', 'ag1', 'ms2', 1.5),
+        mkEdge('e5', 'ms1', 'rc1', 0.5),
+        mkEdge('e6', 'ms2', 'db1', 2),
+        mkEdge('e7', 'ms2', 'ob1', 2.5),
+        mkEdge('e8', 'ag1', 'mq1', 2),
+        mkEdge('e9', 'mq1', 'ts1', 2),
       ],
     },
     'simple-api': {
       nodes: [
-        mkNode('wc1', 'client', { x: 100, y: 250 }, { maxRps: 1000, label: 'API Client' }),
+        mkNode('wc1', 'client', { x: 100, y: 250 }, { maxRps: 1000, label: 'API Client', clientLatencyMs: 20 }),
         mkNode('lb1', 'load-balancer', { x: 360, y: 250 }, { label: 'Load Balancer' }),
         mkNode('as1', 'app-server', { x: 620, y: 160 }, { replicas: 2, label: 'API Server' }),
         mkNode('rc1', 'cache', { x: 880, y: 100 }, { label: 'Cache' }),
         mkNode('db1', 'sql-database', { x: 880, y: 300 }, { label: 'Database' }),
       ],
       edges: [
-        mkEdge('e1', 'wc1', 'lb1'),
-        mkEdge('e2', 'lb1', 'as1'),
-        mkEdge('e3', 'as1', 'rc1'),
-        mkEdge('e4', 'rc1', 'db1'),
+        mkEdge('e1', 'wc1', 'lb1', 35),
+        mkEdge('e2', 'lb1', 'as1', 1.5),
+        mkEdge('e3', 'as1', 'rc1', 0.5),
+        mkEdge('e4', 'rc1', 'db1', 1),
       ],
     },
   };
