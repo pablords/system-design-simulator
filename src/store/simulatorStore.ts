@@ -313,15 +313,15 @@ function buildPresets(): Record<string, { nodes: Node<SimulatorNodeData>[]; edge
   return {
     'ecommerce': {
       nodes: [
-        mkNode('wc1', 'web-client', { x: 100, y: 200 }, { maxRps: 5000, label: 'Web Users' }),
-        mkNode('mc1', 'mobile-client', { x: 100, y: 380 }, { maxRps: 3000, label: 'Mobile Users' }),
+        mkNode('wc1', 'client', { x: 100, y: 200 }, { maxRps: 5000, label: 'Web Users' }),
+        mkNode('mc1', 'mobile', { x: 100, y: 380 }, { maxRps: 3000, label: 'Mobile Users' }),
         mkNode('cdn1', 'cdn', { x: 320, y: 200 }, { label: 'CDN' }),
         mkNode('lb1', 'load-balancer', { x: 560, y: 280 }, { label: 'Load Balancer' }),
         mkNode('as1', 'app-server', { x: 800, y: 160 }, { replicas: 3, maxRps: 2000, label: 'Product API' }),
         mkNode('as2', 'app-server', { x: 800, y: 360 }, { replicas: 2, maxRps: 1500, label: 'Order API' }),
-        mkNode('rc1', 'redis-cache', { x: 1040, y: 120 }, { label: 'Product Cache' }),
-        mkNode('db1', 'sql-db', { x: 1040, y: 280 }, { label: 'Products DB' }),
-        mkNode('db2', 'sql-db', { x: 1040, y: 440 }, { label: 'Orders DB' }),
+        mkNode('rc1', 'cache', { x: 1040, y: 120 }, { label: 'Product Cache' }),
+        mkNode('db1', 'sql-database', { x: 1040, y: 280 }, { label: 'Products DB' }),
+        mkNode('db2', 'sql-database', { x: 1040, y: 440 }, { label: 'Orders DB' }),
         mkNode('mq1', 'message-queue', { x: 800, y: 540 }, { label: 'Order Events' }),
       ],
       edges: [
@@ -338,16 +338,16 @@ function buildPresets(): Record<string, { nodes: Node<SimulatorNodeData>[]; edge
     },
     'streaming': {
       nodes: [
-        mkNode('wc1', 'web-client', { x: 80, y: 200 }, { maxRps: 20000, label: 'Viewers' }),
+        mkNode('wc1', 'client', { x: 80, y: 200 }, { maxRps: 20000, label: 'Viewers' }),
         mkNode('cdn1', 'cdn', { x: 320, y: 200 }, { label: 'Video CDN', cacheHitRate: 0.95 }),
         mkNode('ag1', 'api-gateway', { x: 560, y: 200 }, { label: 'API Gateway' }),
-        mkNode('ms1', 'microservice', { x: 800, y: 120 }, { label: 'Auth Service' }),
-        mkNode('ms2', 'microservice', { x: 800, y: 280 }, { label: 'Catalog Service' }),
+        mkNode('ms1', 'auth-service', { x: 800, y: 120 }, { label: 'Auth Service' }),
+        mkNode('ms2', 'app-server', { x: 800, y: 280 }, { label: 'Catalog Service' }),
         mkNode('mq1', 'message-queue', { x: 800, y: 440 }, { label: 'Analytics Events' }),
-        mkNode('rc1', 'redis-cache', { x: 1040, y: 200 }, { label: 'Session Cache' }),
+        mkNode('rc1', 'cache', { x: 1040, y: 200 }, { label: 'Session Cache' }),
         mkNode('db1', 'nosql-db', { x: 1040, y: 380 }, { label: 'Content DB' }),
-        mkNode('ob1', 'object-storage', { x: 1040, y: 540 }, { label: 'Video Storage' }),
-        mkNode('ts1', 'timeseries-db', { x: 1040, y: 700 }, { label: 'Analytics DB' }),
+        mkNode('ob1', 'object-store', { x: 1040, y: 540 }, { label: 'Video Storage' }),
+        mkNode('ts1', 'nosql-db', { x: 1040, y: 700 }, { label: 'Analytics DB' }),
       ],
       edges: [
         mkEdge('e1', 'wc1', 'cdn1'),
@@ -363,11 +363,11 @@ function buildPresets(): Record<string, { nodes: Node<SimulatorNodeData>[]; edge
     },
     'simple-api': {
       nodes: [
-        mkNode('wc1', 'web-client', { x: 100, y: 250 }, { maxRps: 1000, label: 'API Client' }),
+        mkNode('wc1', 'client', { x: 100, y: 250 }, { maxRps: 1000, label: 'API Client' }),
         mkNode('lb1', 'load-balancer', { x: 360, y: 250 }, { label: 'Load Balancer' }),
         mkNode('as1', 'app-server', { x: 620, y: 160 }, { replicas: 2, label: 'API Server' }),
-        mkNode('rc1', 'redis-cache', { x: 880, y: 100 }, { label: 'Cache' }),
-        mkNode('db1', 'sql-db', { x: 880, y: 300 }, { label: 'Database' }),
+        mkNode('rc1', 'cache', { x: 880, y: 100 }, { label: 'Cache' }),
+        mkNode('db1', 'sql-database', { x: 880, y: 300 }, { label: 'Database' }),
       ],
       edges: [
         mkEdge('e1', 'wc1', 'lb1'),

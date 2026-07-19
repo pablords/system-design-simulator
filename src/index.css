@@ -395,3 +395,221 @@ body { overflow: hidden; height: 100vh; }
   font-family: 'JetBrains Mono', monospace;
   opacity: 0.8;
 }
+
+/* ─── Refined Component Palette UI Styles ─── */
+.palette-search-container {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-dim);
+}
+
+.tutorial-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background-color: #1e3a8a;
+  color: #3b82f6;
+  border: 1px solid #2563eb;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.tutorial-btn:hover {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+.palette-search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.palette-search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.palette-search-input {
+  width: 100%;
+  padding: 6px 10px 6px 30px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.palette-search-input:focus {
+  border-color: var(--accent);
+}
+
+/* Custom platform category & card styles */
+.palette-category-container {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.palette-category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: color var(--transition);
+}
+
+.palette-category-header:hover {
+  color: var(--text-primary);
+}
+
+.palette-category-label-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.component-card-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  cursor: grab;
+  transition: all var(--transition);
+  user-select: none;
+}
+
+.component-card-custom:hover {
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.component-card-custom:active {
+  cursor: grabbing;
+}
+
+.component-card-plus {
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--node-color, var(--accent));
+  width: 10px;
+}
+
+.component-card-label-custom {
+  font-size: 12.5px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #94a3b8;
+  flex: 1;
+  transition: color var(--transition);
+}
+
+.component-card-custom:hover .component-card-label-custom {
+  color: var(--text-primary);
+}
+
+/* Tutorial Modal Styles */
+.tutorial-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.tutorial-modal {
+  background: #0f172a;
+  border: 1.5px solid #334155;
+  border-radius: var(--radius);
+  width: 500px;
+  max-width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+.tutorial-modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tutorial-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #3b82f6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tutorial-modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition);
+}
+
+.tutorial-modal-close:hover {
+  color: var(--text-primary);
+}
+
+.tutorial-modal-body {
+  padding: 20px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #cbd5e1;
+}
+
+.tutorial-step {
+  margin-bottom: 16px;
+  display: flex;
+  gap: 12px;
+}
+
+.tutorial-step-number {
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 700;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.tutorial-step-content strong {
+  color: var(--text-primary);
+}
+

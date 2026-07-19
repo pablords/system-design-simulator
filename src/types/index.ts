@@ -1,30 +1,53 @@
 export type ComponentCategory =
   | 'client'
-  | 'network'
+  | 'traffic-edge'
   | 'compute'
-  | 'cache'
-  | 'database'
-  | 'messaging'
   | 'storage'
-  | 'monitoring';
+  | 'messaging'
+  | 'observability'
+  | 'network';
 
 export type ComponentType =
-  | 'web-client'
-  | 'mobile-client'
-  | 'load-balancer'
+  // Clients
+  | 'client'
+  | 'mobile'
+  // Traffic & Edge
+  | 'dns'
   | 'cdn'
+  | 'load-balancer'
+  | 'waf'
   | 'api-gateway'
+  | 'ingress'
+  // Compute
   | 'app-server'
-  | 'microservice'
-  | 'redis-cache'
-  | 'memcached'
-  | 'sql-db'
+  | 'worker'
+  | 'serverless'
+  | 'auth-service'
+  | 'search'
+  | 'scheduler'
+  | 'notifications'
+  | 'analytics'
+  // Storage
+  | 'sql-database'
   | 'nosql-db'
-  | 'timeseries-db'
+  | 'cache'
+  | 'object-store'
+  | 'data-warehouse'
+  | 'vector-db'
+  // Messaging
   | 'message-queue'
-  | 'event-bus'
-  | 'object-storage'
-  | 'metrics-collector';
+  | 'pub-sub'
+  | 'event-stream'
+  | 'kafka'
+  // Observability
+  | 'metrics'
+  | 'logs'
+  | 'tracing'
+  | 'alerting'
+  | 'health-check'
+  // Network
+  | 'vpc'
+  | 'subnet';
 
 export type NodeStatus = 'idle' | 'ok' | 'warning' | 'critical';
 

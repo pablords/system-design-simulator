@@ -5,6 +5,7 @@ import { Trash2 } from 'lucide-react';
 import type { SimulatorNodeData, NodeStatus } from '../../types';
 import { COMPONENT_DEFINITIONS } from '../../engine/models/ComponentModel';
 import { useSimulatorStore } from '../../store/simulatorStore';
+import { ServiceIcon } from '../ui/ServiceIcon';
 
 const STATUS_COLORS: Record<NodeStatus, string> = {
   idle: '#475569',
@@ -71,7 +72,7 @@ export const ComponentNode = memo(({ id, data: rawData, selected }: NodeProps) =
       )}
 
       <div className="node-header" style={{ borderColor: def.color }}>
-        <span className="node-icon">{def.icon}</span>
+        <ServiceIcon type={data.componentType} size={18} style={{ marginRight: 6 }} />
         <span className="node-label">{config.label}</span>
         <button className="node-delete-btn" onClick={handleDelete} title="Remove">
           <Trash2 size={12} />

@@ -3,6 +3,7 @@ import { X, Server, Cpu, HardDrive, Zap, Users, Clock, Activity, Layers } from '
 import { useSimulatorStore } from '../../store/simulatorStore';
 import { COMPONENT_DEFINITIONS } from '../../engine/models/ComponentModel';
 import { LineChart, Line, ResponsiveContainer, Tooltip, YAxis } from 'recharts';
+import { ServiceIcon } from '../ui/ServiceIcon';
 
 const Slider: React.FC<{
   label: string;
@@ -60,7 +61,7 @@ export const ConfigPanel: React.FC = () => {
       {/* Header */}
       <div className="config-header">
         <div className="config-header-left">
-          <span className="config-node-icon">{def.icon}</span>
+          <ServiceIcon type={node.data.componentType} size={24} style={{ marginRight: 8 }} />
           <div>
             <div className="config-node-type">{def.label}</div>
             <div className="config-node-desc">{def.description}</div>
