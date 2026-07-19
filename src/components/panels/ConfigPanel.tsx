@@ -92,7 +92,7 @@ const Slider: React.FC<{
 };
 
 export const ConfigPanel: React.FC = () => {
-  const { selectedNodeId, nodes, updateNodeConfig, selectNode } = useSimulatorStore();
+  const { selectedNodeId, nodes, edges, updateNodeConfig, selectNode, connectNodes, disconnectNodes } = useSimulatorStore();
   const node = nodes.find((n) => n.id === selectedNodeId);
 
   if (!node) return null;
@@ -241,10 +241,10 @@ export const ConfigPanel: React.FC = () => {
         <div className="config-section-title" style={{ marginTop: '16px' }}>
           <Layers size={14} /> Conexões Rápidas
         </div>
-        <div style={{ fontSize: '9px', color: '#ef4444', marginBottom: '8px', fontFamily: 'monospace' }}>
-          [DEBUG] Total nodes: {nodes.length} | Others: {nodes.filter(n => n.id !== node.id).map(n => n.id).join(', ')}
+        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '8px', lineHeight: '1.4' }}>
+          Ligue ou desligue este componente a outros nós do canvas sem precisar arrastar:
         </div>
-        <div className="btn-connect-container" style={{ border: '2px solid red', minHeight: '50px', background: 'blue', padding: '10px' }}>
+        <div className="btn-connect-container">
           {nodes.filter(n => n.id !== node.id).length === 0 ? (
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px 0' }}>
               Nenhum outro nó no canvas para conectar.
@@ -252,12 +252,78 @@ export const ConfigPanel: React.FC = () => {
           ) : (
             nodes.filter(n => n.id !== node.id).map(other => {
               const otherDef = COMPONENT_DEFINITIONS[other.data.componentType];
+              
+              // Direções possíveis baseadas nas definições de origem/destino
               const canConnectAsOutput = !def.isSink && !otherDef.isSource;
               const canConnectAsInput = !def.isSource && !otherDef.isSink;
-
+              
+              const isConnectedOutput = edges.some(e => e.source === node.id && e.target === other.id);
+              const isConnectedInput = edges.some(e => e.source === other.id && e.target === node.id);
+              
               return (
-                <div key={other.id} style={{ color: '#fbbf24', padding: '8px', border: '1px solid #fbbf24', margin: '4px 0', borderRadius: '4px', fontSize: '12px' }}>
-                  [TEST] Node: {other.id} | Out: {canConnectAsOutput ? 'YES' : 'NO'} | In: {canConnectAsInput ? 'YES' : 'NO'}
+                <div 
+                  key={other.id} 
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    padding: '10px',
+                    background: 'rgba(30, 41, 59, 0.4)',
+                    border: '1px solid #334155',
+                    borderRadius: '6px',
+                    marginBottom: '8px',
+                    alignItems: 'stretch'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '14px' }}>{otherDef.icon}</span>
+                    <span style={{ fontWeight: 600, color: '#ffffff', fontSize: '11px' }}>{other.data.config.label || otherDef.label}</span>
+                  </div>
+                  
+                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                    {canConnectAsOutput && (
+                      <button 
+                        style={{
+                          flex: 1,
+                          fontSize: '10px',
+                          padding: '5px 8px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontWeight: 500,
+                          transition: 'all 0.2s ease',
+                          border: '1px solid #334155',
+                          background: isConnectedOutput ? 'rgba(16, 185, 129, 0.2)' : '#1e293b',
+                          borderColor: isConnectedOutput ? '#10b981' : '#334155',
+                          color: isConnectedOutput ? '#10b981' : '#94a3b8',
+                          textAlign: 'center'
+                        }}
+                        onClick={() => isConnectedOutput ? disconnectNodes(node.id, other.id) : connectNodes(node.id, other.id)}
+                      >
+                        {isConnectedOutput ? '🟢 Saída Ativa' : '⚪ Ligar Saída ➡️'}
+                      </button>
+                    )}
+                    {canConnectAsInput && (
+                      <button 
+                        style={{
+                          flex: 1,
+                          fontSize: '10px',
+                          padding: '5px 8px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontWeight: 500,
+                          transition: 'all 0.2s ease',
+                          border: '1px solid #334155',
+                          background: isConnectedInput ? 'rgba(16, 185, 129, 0.2)' : '#1e293b',
+                          borderColor: isConnectedInput ? '#10b981' : '#334155',
+                          color: isConnectedInput ? '#10b981' : '#94a3b8',
+                          textAlign: 'center'
+                        }}
+                        onClick={() => isConnectedInput ? disconnectNodes(other.id, node.id) : connectNodes(other.id, node.id)}
+                      >
+                        {isConnectedInput ? '🟢 Entrada Ativa' : '⚪ Ligar Entrada ⬅️'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })
