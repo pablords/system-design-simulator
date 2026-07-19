@@ -173,7 +173,7 @@ export const ConfigPanel: React.FC = () => {
               <Layers size={14} /> Capacity
             </div>
             {config.replicas !== undefined && (
-              <Slider label="Replicas" value={config.replicas} min={1} max={20} step={1} unit="×" onChange={(v) => update('replicas', v)} />
+              <Slider label="Replicas" value={config.replicas} min={1} max={200} step={1} unit="×" onChange={(v) => update('replicas', v)} />
             )}
             {config.maxRps !== undefined && (
               <Slider label="Max RPS / replica" value={config.maxRps} min={100} max={100000} step={100} unit=" rps" onChange={(v) => update('maxRps', v)} />
