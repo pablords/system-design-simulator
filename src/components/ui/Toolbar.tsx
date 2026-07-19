@@ -67,7 +67,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen,
         </div>
 
         {/* Global Load Slider */}
-        <div className="global-load-slider">
+        <div className="global-load-slider" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span className="speed-label slider-label">Global Load</span>
           <input
             type="range"
@@ -78,9 +78,33 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen,
             onChange={(e) => setGlobalTrafficScale(Number(e.target.value))}
             className="global-load-range-input"
           />
-          <span className="speed-label value-label">
-            {simulation.globalTrafficScale ?? 100}%
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+            <input
+              type="number"
+              min={0}
+              max={500}
+              step={10}
+              value={simulation.globalTrafficScale ?? 100}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                if (!isNaN(val)) {
+                  setGlobalTrafficScale(Math.max(0, Math.min(500, val)));
+                }
+              }}
+              style={{
+                width: '50px',
+                padding: '2px 4px',
+                background: '#192231',
+                border: '1px solid #334155',
+                borderRadius: '4px',
+                color: '#ffffff',
+                fontSize: '11px',
+                fontFamily: 'var(--font-mono)',
+                textAlign: 'right',
+              }}
+            />
+            <span className="speed-label" style={{ minWidth: 'auto', padding: 0 }}>%</span>
+          </div>
         </div>
 
         {/* Tick counter */}

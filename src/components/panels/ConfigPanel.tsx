@@ -13,27 +13,57 @@ const Slider: React.FC<{
   step: number;
   unit: string;
   onChange: (v: number) => void;
-}> = ({ label, value, min, max, step, unit, onChange }) => (
-  <div className="config-field">
-    <div className="config-field-header">
-      <span className="config-label">{label}</span>
-      <span className="config-value">{value}{unit}</span>
+}> = ({ label, value, min, max, step, unit, onChange }) => {
+  const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = Number(e.target.value);
+    if (!isNaN(val)) {
+      onChange(Math.max(min, Math.min(max, val)));
+    }
+  };
+
+  return (
+    <div className="config-field">
+      <div className="config-field-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span className="config-label">{label}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <input
+            type="number"
+            min={min}
+            max={max}
+            step={step}
+            value={value}
+            onChange={handleNumberChange}
+            style={{
+              width: '64px',
+              padding: '2px 6px',
+              background: '#192231',
+              border: '1px solid #334155',
+              borderRadius: '4px',
+              color: '#ffffff',
+              fontSize: '11px',
+              fontFamily: 'var(--font-mono)',
+              textAlign: 'right',
+            }}
+          />
+          <span className="config-unit" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{unit}</span>
+        </div>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="config-slider"
+      />
+      <div className="config-range-labels">
+        <span>{min}{unit}</span>
+        <span>{max}{unit}</span>
+      </div>
     </div>
-    <input
-      type="range"
-      min={min}
-      max={max}
-      step={step}
-      value={value}
-      onChange={(e) => onChange(Number(e.target.value))}
-      className="config-slider"
-    />
-    <div className="config-range-labels">
-      <span>{min}{unit}</span>
-      <span>{max}{unit}</span>
-    </div>
-  </div>
-);
+  );
+};
 
 export const ConfigPanel: React.FC = () => {
   const { selectedNodeId, nodes, updateNodeConfig, selectNode } = useSimulatorStore();
