@@ -251,9 +251,13 @@ export const ConfigPanel: React.FC = () => {
             </div>
           ) : (
             nodes.filter(n => n.id !== node.id).map(other => {
+              const otherDef = COMPONENT_DEFINITIONS[other.data.componentType];
+              const canConnectAsOutput = !def.isSink && !otherDef.isSource;
+              const canConnectAsInput = !def.isSource && !otherDef.isSink;
+
               return (
                 <div key={other.id} style={{ color: '#fbbf24', padding: '8px', border: '1px solid #fbbf24', margin: '4px 0', borderRadius: '4px', fontSize: '12px' }}>
-                  [TEST] Node: {other.id} - Label: {other.data.config.label || other.id}
+                  [TEST] Node: {other.id} | Out: {canConnectAsOutput ? 'YES' : 'NO'} | In: {canConnectAsInput ? 'YES' : 'NO'}
                 </div>
               );
             })
