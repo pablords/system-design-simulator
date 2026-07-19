@@ -30,9 +30,15 @@ const ComponentCard: React.FC<ComponentCardProps> = ({ def }) => {
   );
 };
 
+interface ComponentPaletteProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
 type CollapsedState = Partial<Record<ComponentCategory, boolean>>;
 
-export const ComponentPalette: React.FC = () => {
+export const ComponentPalette: React.FC<ComponentPaletteProps> = ({ isOpen, onClose }) => {
+  const { addNode } = useSimulatorStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<CollapsedState>({
@@ -44,6 +50,11 @@ export const ComponentPalette: React.FC = () => {
     observability: true,
     network: true,
   });
+
+  const handleComponentClick = (type: string) => {
+    // Insere o nó ligeiramente deslocado ao centro da tela
+    addNode(type as any, { x: 300, y: 250 });
+  };
 
   const toggleCategory = (cat: ComponentCategory) => {
     setCollapsed((prev) => ({ ...prev, [cat]: !prev[cat] }));
@@ -66,13 +77,23 @@ export const ComponentPalette: React.FC = () => {
 
   return (
     <>
-      <aside className="component-palette">
+      <aside className={`component-palette ${!isOpen ? 'collapsed' : ''}`}>
         {/* Header Search & Tutorial */}
         <div className="palette-search-container">
-          <button className="tutorial-btn" onClick={() => setIsTutorialOpen(true)}>
-            <GraduationCap size={16} />
-            Start Tutorial
-          </button>
+          <div style={{ display: 'flex', gap: 6, width: '100%' }}>
+            <button className="tutorial-btn" style={{ flex: 1 }} onClick={() => setIsTutorialOpen(true)}>
+              <GraduationCap size={16} />
+              Start Tutorial
+            </button>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={onClose}
+              title="Ocultar paleta de componentes"
+              style={{ padding: '0 8px', border: '1px solid #334155', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <X size={16} />
+            </button>
+          </div>
           <div className="palette-search-wrapper">
             <Search size={14} className="palette-search-icon" />
             <input
@@ -99,7 +120,9 @@ export const ComponentPalette: React.FC = () => {
               {!collapsed[cat.id] && (
                 <div style={{ display: 'flex', flexDirection: 'column', paddingBottom: 6 }}>
                   {cat.components.map((def) => (
-                    <ComponentCard key={def.type} def={def} />
+                    <div key={def.type} onClick={() => handleComponentClick(def.type)}>
+                      <ComponentCard def={def} />
+                    </div>
                   ))}
                 </div>
               )}

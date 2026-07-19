@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Play, Pause, RotateCcw, Save, FolderOpen, Trash2, Zap, ChevronDown } from 'lucide-react';
+import { Play, Pause, RotateCcw, Save, FolderOpen, Trash2, Zap, ChevronDown, Menu } from 'lucide-react';
 import { useSimulatorStore } from '../../store/simulatorStore';
 
 interface ToolbarProps {
   onSave: () => void;
   onLoad: () => void;
+  isPaletteOpen: boolean;
+  onTogglePalette: () => void;
 }
 
-export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad }) => {
+export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen, onTogglePalette }) => {
   const { simulation, startSimulation, pauseSimulation, resetSimulation, setSimulationSpeed, clearCanvas, loadPreset, setGlobalTrafficScale } = useSimulatorStore();
   const [showPresets, setShowPresets] = useState(false);
 
@@ -20,6 +22,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad }) => {
   return (
     <header className="toolbar">
       <div className="toolbar-brand">
+        <button
+          className="btn btn-ghost btn-sm btn-menu-toggle"
+          onClick={onTogglePalette}
+          title={isPaletteOpen ? "Ocultar Paleta" : "Exibir Paleta"}
+        >
+          <Menu size={18} />
+        </button>
         <Zap size={20} className="brand-icon" />
         <span className="brand-name">SysDesign Simulator</span>
       </div>
@@ -29,18 +38,18 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad }) => {
         {simulation.running ? (
           <button className="btn btn-warning" onClick={pauseSimulation}>
             <Pause size={16} />
-            Pause
+            <span className="btn-text">Pause</span>
           </button>
         ) : (
           <button className="btn btn-primary" onClick={startSimulation}>
             <Play size={16} />
-            Simulate
+            <span className="btn-text">Simulate</span>
           </button>
         )}
 
         <button className="btn btn-ghost" onClick={resetSimulation} title="Reset simulation">
           <RotateCcw size={16} />
-          Reset
+          <span className="btn-text">Reset</span>
         </button>
 
         {/* Speed selector */}
@@ -58,8 +67,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad }) => {
         </div>
 
         {/* Global Load Slider */}
-        <div className="global-load-slider" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', borderLeft: '1px solid var(--border)', borderRight: '1px solid var(--border)' }}>
-          <span className="speed-label" style={{ whiteSpace: 'nowrap' }}>Global Load</span>
+        <div className="global-load-slider">
+          <span className="speed-label slider-label">Global Load</span>
           <input
             type="range"
             min={0}
@@ -67,9 +76,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad }) => {
             step={10}
             value={simulation.globalTrafficScale ?? 100}
             onChange={(e) => setGlobalTrafficScale(Number(e.target.value))}
-            style={{ width: 100, accentColor: 'var(--accent)', cursor: 'pointer' }}
+            className="global-load-range-input"
           />
-          <span className="speed-label" style={{ fontFamily: 'var(--font-mono)', minWidth: 40, textAlign: 'right' }}>
+          <span className="speed-label value-label">
             {simulation.globalTrafficScale ?? 100}%
           </span>
         </div>
@@ -85,7 +94,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad }) => {
         {/* Presets */}
         <div className="relative">
           <button className="btn btn-ghost" onClick={() => setShowPresets(!showPresets)}>
-            Presets
+            <span className="btn-text" style={{ marginRight: 4 }}>Presets</span>
             <ChevronDown size={14} />
           </button>
           {showPresets && (
@@ -110,12 +119,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad }) => {
 
         <button className="btn btn-ghost" onClick={onSave}>
           <Save size={16} />
-          Save
+          <span className="btn-text">Save</span>
         </button>
 
         <button className="btn btn-ghost" onClick={onLoad}>
           <FolderOpen size={16} />
-          Load
+          <span className="btn-text">Load</span>
         </button>
       </div>
     </header>

@@ -613,3 +613,132 @@ body { overflow: hidden; height: 100vh; }
   color: var(--text-primary);
 }
 
+/* ─── Transições e Responsividade para Tablets ─── */
+
+.component-palette {
+  width: 210px;
+  transition: width 200ms cubic-bezier(0.4, 0, 0.2, 1), padding 200ms ease, border 200ms ease;
+  will-change: width;
+}
+
+.component-palette.collapsed {
+  width: 0 !important;
+  padding: 0 !important;
+  border-right: none !important;
+  overflow: hidden;
+}
+
+.btn-menu-toggle {
+  padding: 4px 8px;
+  margin-right: 6px;
+  background: transparent;
+  border-color: transparent;
+}
+
+.global-load-slider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+
+.global-load-range-input {
+  width: 100px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* --- Media Query: iPads / Tablets (Modo Paisagem e Retrato) --- */
+@media (max-width: 1024px) {
+  /* Ocultar texto descritivo dos botões para poupar espaço */
+  .btn-text {
+    display: none;
+  }
+  
+  .btn {
+    padding: 6px 10px;
+  }
+  
+  .brand-name {
+    display: none; /* Deixa apenas o ícone do raio visível */
+  }
+  
+  .toolbar-brand {
+    min-width: auto;
+  }
+  
+  .toolbar-right {
+    min-width: auto;
+    gap: 4px;
+  }
+
+  /* Slider Global menor no tablet */
+  .global-load-range-input {
+    width: 70px;
+  }
+  
+  .global-load-slider .slider-label {
+    font-size: 10px;
+  }
+
+  /* Painel de Configurações FLUTUANTE sobre o canvas */
+  .config-panel {
+    position: absolute;
+    right: 12px;
+    top: 64px; /* Abaixo da toolbar */
+    bottom: 120px; /* Acima do painel de métricas */
+    height: auto;
+    max-height: calc(100vh - 200px);
+    width: 280px;
+    border-radius: var(--radius-lg);
+    border: 1.5px solid var(--border);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+    z-index: 100;
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(10px);
+    transition: transform 200ms ease;
+  }
+
+  /* Diminuir levemente as estatísticas do painel inferior */
+  .stat-item {
+    padding: 0 8px;
+  }
+  
+  .metrics-stats {
+    padding: 0 8px;
+  }
+}
+
+/* --- Media Query: Tablets Pequenos (Retrato - 768px) --- */
+@media (max-width: 768px) {
+  .global-load-slider .slider-label {
+    display: none; /* Oculta a palavra "Global Load" e mantém apenas o slider e a porcentagem */
+  }
+  
+  .speed-selector .speed-label {
+    display: none; /* Oculta a palavra "Speed" e mantém apenas os botões de multiplicador */
+  }
+  
+  /* Garantir que o rodapé de métricas e gargalos não quebre */
+  .metrics-panel {
+    flex-direction: column;
+    max-height: 180px;
+    align-items: stretch;
+    height: auto;
+  }
+  
+  .metrics-stats {
+    border-right: none;
+    border-bottom: 1px solid var(--border-dim);
+    height: 48px;
+    justify-content: space-around;
+  }
+  
+  .bottleneck-list {
+    height: 60px;
+    padding: 8px;
+  }
+}
+

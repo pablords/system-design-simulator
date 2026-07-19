@@ -10,14 +10,20 @@ import { useSimulatorStore } from './store/simulatorStore';
 function App() {
   const [showSave, setShowSave] = useState(false);
   const [showLoad, setShowLoad] = useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(true);
   const { selectedNodeId } = useSimulatorStore();
 
   return (
     <div className="app-shell">
-      <Toolbar onSave={() => setShowSave(true)} onLoad={() => setShowLoad(true)} />
+      <Toolbar
+        onSave={() => setShowSave(true)}
+        onLoad={() => setShowLoad(true)}
+        isPaletteOpen={isPaletteOpen}
+        onTogglePalette={() => setIsPaletteOpen(!isPaletteOpen)}
+      />
 
       <div className="app-body">
-        <ComponentPalette />
+        <ComponentPalette isOpen={isPaletteOpen} onClose={() => setIsPaletteOpen(false)} />
 
         <main className="canvas-area">
           <SimulatorCanvas />
