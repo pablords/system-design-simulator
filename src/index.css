@@ -692,8 +692,6 @@ body { overflow: hidden; height: 100vh; }
     right: 12px;
     top: 12px; /* Espaço abaixo da toolbar dentro de app-body */
     bottom: 120px; /* Alinhado exatamente 10px acima da barra de métricas que tem 110px */
-    height: auto;
-    max-height: none;
     width: 280px;
     border-radius: var(--radius-lg);
     border: 1.5px solid var(--border);
@@ -744,8 +742,6 @@ body { overflow: hidden; height: 100vh; }
     right: 12px !important;
     top: 12px !important;
     bottom: 120px !important;
-    height: auto !important;
-    max-height: none !important;
   }
 }
 
@@ -863,8 +859,6 @@ body { overflow: hidden; height: 100vh; }
     right: 12px !important;
     top: 12px !important;
     bottom: 120px !important;
-    height: auto !important;
-    max-height: none !important;
   }
 }
 
