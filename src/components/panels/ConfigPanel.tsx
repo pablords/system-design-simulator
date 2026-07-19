@@ -244,7 +244,7 @@ export const ConfigPanel: React.FC = () => {
         <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '8px', lineHeight: '1.4' }}>
           Ligue ou desligue este componente a outros nós do canvas sem precisar arrastar:
         </div>
-        <div className="btn-connect-container">
+        <div className="btn-connect-container" style={{ flexShrink: 0 }}>
           {nodes.filter(n => n.id !== node.id).length === 0 ? (
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px 0' }}>
               Nenhum outro nó no canvas para conectar.

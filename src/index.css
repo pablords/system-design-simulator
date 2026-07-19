@@ -868,6 +868,7 @@ body { overflow: hidden; height: 100vh; }
   overflow-y: auto;
   margin-bottom: 16px;
   padding-right: 4px;
+  flex-shrink: 0;
 }
 
 .btn-connect-row {
