@@ -8,7 +8,7 @@ interface ToolbarProps {
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad }) => {
-  const { simulation, startSimulation, pauseSimulation, resetSimulation, setSimulationSpeed, clearCanvas, loadPreset } = useSimulatorStore();
+  const { simulation, startSimulation, pauseSimulation, resetSimulation, setSimulationSpeed, clearCanvas, loadPreset, setGlobalTrafficScale } = useSimulatorStore();
   const [showPresets, setShowPresets] = useState(false);
 
   const speedOptions = [
@@ -55,6 +55,23 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad }) => {
               {opt.label}
             </button>
           ))}
+        </div>
+
+        {/* Global Load Slider */}
+        <div className="global-load-slider" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', borderLeft: '1px solid var(--border)', borderRight: '1px solid var(--border)' }}>
+          <span className="speed-label" style={{ whiteSpace: 'nowrap' }}>Global Load</span>
+          <input
+            type="range"
+            min={0}
+            max={500}
+            step={10}
+            value={simulation.globalTrafficScale ?? 100}
+            onChange={(e) => setGlobalTrafficScale(Number(e.target.value))}
+            style={{ width: 100, accentColor: 'var(--accent)', cursor: 'pointer' }}
+          />
+          <span className="speed-label" style={{ fontFamily: 'var(--font-mono)', minWidth: 40, textAlign: 'right' }}>
+            {simulation.globalTrafficScale ?? 100}%
+          </span>
         </div>
 
         {/* Tick counter */}

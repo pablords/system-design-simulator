@@ -57,6 +57,7 @@ interface SimulatorStore {
   // Actions - Presets
   loadPreset: (preset: 'ecommerce' | 'streaming' | 'simple-api') => void;
   clearCanvas: () => void;
+  setGlobalTrafficScale: (scale: number) => void;
 }
 
 const SPEED_INTERVALS: Record<SimulationSpeed, number> = {
@@ -78,6 +79,7 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
     speed: 'normal',
     totalRps: 0,
     bottlenecks: [],
+    globalTrafficScale: 100,
   },
 
   onNodesChange: (changes) => {
@@ -90,7 +92,7 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
 
   onConnect: (connection) => {
     set((state) => ({
-      edges: addEdge({ ...connection, animated: true, style: { stroke: '#6366f1', strokeWidth: 2 } }, state.edges),
+      edges: addEdge({ ...connection, type: 'connectionEdge', animated: true }, state.edges),
     }));
   },
 
@@ -138,13 +140,18 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
     if (nodes.length === 0) return;
 
     const newTick = simulation.tick + 1;
-    const { updatedMetrics, bottlenecks, totalRps } = runSimulationTick(nodes, edges, newTick);
+    const { updatedMetrics, updatedEdgeMetrics, bottlenecks, totalRps } = runSimulationTick(nodes, edges, newTick, simulation.globalTrafficScale);
 
     set((state) => ({
       nodes: state.nodes.map((n) =>
         updatedMetrics[n.id]
           ? { ...n, data: { ...n.data, metrics: updatedMetrics[n.id] } }
           : n
+      ),
+      edges: state.edges.map((e) =>
+        updatedEdgeMetrics[e.id]
+          ? { ...e, data: { ...(e.data || {}), metrics: updatedEdgeMetrics[e.id] } }
+          : e
       ),
       simulation: {
         ...state.simulation,
@@ -189,7 +196,7 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
     if (simulationIntervalId) clearInterval(simulationIntervalId);
     set((state) => ({
       simulationIntervalId: null,
-      simulation: { running: false, tick: 0, speed: state.simulation.speed, totalRps: 0, bottlenecks: [] },
+      simulation: { running: false, tick: 0, speed: state.simulation.speed, totalRps: 0, bottlenecks: [], globalTrafficScale: 100 },
       nodes: state.nodes.map((n) => ({ ...n, data: { ...n.data, metrics: createDefaultMetrics() } })),
     }));
   },
@@ -236,7 +243,7 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
         data: { ...n.data, metrics: createDefaultMetrics() },
       })),
       edges: scenario.edges as Edge[],
-      simulation: { running: false, tick: 0, speed: 'normal', totalRps: 0, bottlenecks: [] },
+      simulation: { running: false, tick: 0, speed: 'normal', totalRps: 0, bottlenecks: [], globalTrafficScale: 100 },
       selectedNodeId: null,
     });
   },
@@ -261,7 +268,7 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
       nodes: [],
       edges: [],
       selectedNodeId: null,
-      simulation: { running: false, tick: 0, speed: 'normal', totalRps: 0, bottlenecks: [] },
+      simulation: { running: false, tick: 0, speed: 'normal', totalRps: 0, bottlenecks: [], globalTrafficScale: 100 },
     });
   },
 
@@ -270,6 +277,12 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
     const presets = buildPresets();
     const { nodes, edges } = presets[preset];
     set({ nodes, edges });
+  },
+
+  setGlobalTrafficScale: (scale) => {
+    set((state) => ({
+      simulation: { ...state.simulation, globalTrafficScale: scale },
+    }));
   },
 }));
 
@@ -293,8 +306,8 @@ function buildPresets(): Record<string, { nodes: Node<SimulatorNodeData>[]; edge
     id,
     source,
     target,
+    type: 'connectionEdge',
     animated: true,
-    style: { stroke: '#6366f1', strokeWidth: 2 },
   });
 
   return {

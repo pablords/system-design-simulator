@@ -36,6 +36,21 @@ export interface ComponentConfig {
   storageGb: number;
   cacheHitRate?: number; // 0-1, only for cache nodes
   label: string;
+  connectionPool?: number; // max concurrent connections (e.g. for database, cache)
+  timeoutMs?: number;      // source request timeout limit
+  rateLimiterEnabled?: boolean; // semaphore / rate limiter active
+}
+
+export interface EdgeMetrics {
+  rps: number;
+  queueSize: number;
+  latencyMs: number;
+  timeoutsPerSecond: number;
+  status: 'ok' | 'warning' | 'critical';
+}
+
+export interface SimulatorEdgeData extends Record<string, unknown> {
+  metrics?: EdgeMetrics;
 }
 
 export interface NodeMetrics {
@@ -48,6 +63,9 @@ export interface NodeMetrics {
   queueDepth: number;
   status: NodeStatus;
   history: MetricSnapshot[];
+  endToEndLatencyMs?: number;
+  consecutiveOverloadTicks?: number;
+  restartCooldownTicks?: number;
 }
 
 export interface MetricSnapshot {
@@ -84,6 +102,7 @@ export interface SimulationState {
   speed: SimulationSpeed;
   totalRps: number;
   bottlenecks: Bottleneck[];
+  globalTrafficScale: number; // 0% to 500% traffic factor
 }
 
 export interface SavedScenario {

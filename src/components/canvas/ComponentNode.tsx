@@ -83,12 +83,23 @@ export const ComponentNode = memo(({ id, data: rawData, selected }: NodeProps) =
       <div className="node-metrics">
         {status === 'idle' ? (
           <div className="node-idle-msg">Idle — press Simulate</div>
+        ) : (metrics.restartCooldownTicks ?? 0) > 0 ? (
+          <div className="node-crashed-alert animate-flash-fast">
+            <span className="node-crashed-label">🔴 CRASHED</span>
+            <span className="node-crashed-countdown">Rebooting... ({metrics.restartCooldownTicks}t)</span>
+          </div>
         ) : (
           <>
             <div className="node-metric-row">
               <span className="metric-key">RPS</span>
               <span className="metric-val">{metrics.inboundRps.toLocaleString()}</span>
             </div>
+            {def.isSource && metrics.endToEndLatencyMs !== undefined && metrics.endToEndLatencyMs > 0 && (
+              <div className="node-metric-row">
+                <span className="metric-key" style={{ color: '#818cf8' }}>E2E Lat</span>
+                <span className="metric-val" style={{ color: '#818cf8', fontWeight: 600 }}>{metrics.endToEndLatencyMs}ms</span>
+              </div>
+            )}
             <div className="node-metric-row">
               <span className="metric-key">CPU</span>
               <div className="metric-bar-wrap">
@@ -103,7 +114,7 @@ export const ComponentNode = memo(({ id, data: rawData, selected }: NodeProps) =
               </div>
               <span className="metric-val">{metrics.ramPct}%</span>
             </div>
-            {metrics.latencyMs > 0 && (
+            {!def.isSource && metrics.latencyMs > 0 && (
               <div className="node-metric-row">
                 <span className="metric-key">Lat</span>
                 <span className="metric-val">{metrics.latencyMs}ms</span>

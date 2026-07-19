@@ -43,7 +43,7 @@ export const ConfigPanel: React.FC = () => {
   const def = COMPONENT_DEFINITIONS[node.data.componentType];
   const { config, metrics } = node.data;
 
-  const update = (key: string, value: number | string) => {
+  const update = (key: string, value: number | string | boolean) => {
     updateNodeConfig(node.id, { [key]: value });
   };
 
@@ -89,6 +89,23 @@ export const ConfigPanel: React.FC = () => {
 
         <Slider label="Replicas" value={config.replicas} min={1} max={20} step={1} unit="×" onChange={(v) => update('replicas', v)} />
         <Slider label="Max RPS / replica" value={config.maxRps} min={100} max={100000} step={100} unit=" rps" onChange={(v) => update('maxRps', v)} />
+        {config.connectionPool !== undefined && (
+          <Slider label="Connection Pool" value={config.connectionPool} min={5} max={5000} step={5} unit=" conns" onChange={(v) => update('connectionPool', v)} />
+        )}
+        {config.timeoutMs !== undefined && (
+          <Slider label="Timeout" value={config.timeoutMs} min={50} max={10000} step={50} unit=" ms" onChange={(v) => update('timeoutMs', v)} />
+        )}
+        {!def.isSource && !def.isSink && (
+          <div className="config-field" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, padding: '4px 0' }}>
+            <span className="config-label">Semáforo (Rate Limiter)</span>
+            <input
+              type="checkbox"
+              checked={!!config.rateLimiterEnabled}
+              onChange={(e) => update('rateLimiterEnabled', e.target.checked)}
+              style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--accent)' }}
+            />
+          </div>
+        )}
 
         <div className="config-section-title">
           <Server size={14} /> Resources

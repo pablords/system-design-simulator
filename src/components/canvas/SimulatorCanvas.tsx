@@ -13,7 +13,10 @@ import { ComponentNode } from './ComponentNode';
 import { useSimulatorStore } from '../../store/simulatorStore';
 import type { ComponentType } from '../../types';
 
+import { ConnectionEdge } from './ConnectionEdge';
+
 const nodeTypes = { simulatorNode: ComponentNode };
+const edgeTypes = { connectionEdge: ConnectionEdge };
 
 const CanvasInner: React.FC = () => {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, selectNode } = useSimulatorStore();
@@ -51,11 +54,12 @@ const CanvasInner: React.FC = () => {
         onConnect={onConnect}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         defaultEdgeOptions={{
+          type: 'connectionEdge',
           animated: true,
-          style: { stroke: '#6366f1', strokeWidth: 2 },
         }}
         proOptions={{ hideAttribution: true }}
       >
