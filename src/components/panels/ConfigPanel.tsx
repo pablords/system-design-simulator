@@ -92,7 +92,7 @@ const Slider: React.FC<{
 };
 
 export const ConfigPanel: React.FC = () => {
-  const { selectedNodeId, nodes, updateNodeConfig, selectNode } = useSimulatorStore();
+  const { selectedNodeId, nodes, edges, updateNodeConfig, selectNode, connectNodes, disconnectNodes } = useSimulatorStore();
   const node = nodes.find((n) => n.id === selectedNodeId);
 
   if (!node) return null;
@@ -210,6 +210,43 @@ export const ConfigPanel: React.FC = () => {
             />
           </>
         )}
+
+        {/* Conexões Rápidas */}
+        <div className="config-section-title" style={{ marginTop: '16px' }}>
+          <Layers size={14} /> Conexões Rápidas
+        </div>
+        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '8px', lineHeight: '1.4' }}>
+          Ligue ou desligue este componente a outros nós do canvas sem precisar arrastar:
+        </div>
+        <div className="btn-connect-container">
+          {nodes.filter(n => n.id !== node.id).length === 0 ? (
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px 0' }}>
+              Nenhum outro nó no canvas para conectar.
+            </div>
+          ) : (
+            nodes.filter(n => n.id !== node.id).map(other => {
+              const isConnected = edges.some(e => e.source === node.id && e.target === other.id);
+              const isInbound = edges.some(e => e.source === other.id && e.target === node.id);
+              const otherDef = COMPONENT_DEFINITIONS[other.data.componentType];
+              
+              return (
+                <div key={other.id} className="btn-connect-row">
+                  <div className="btn-connect-info">
+                    <span style={{ fontSize: '12px' }}>{otherDef.icon}</span>
+                    <span style={{ fontWeight: 500 }}>{other.data.config.label || otherDef.label}</span>
+                    {isInbound && <span className="btn-connect-inbound-tag">(Entrada ⬅️)</span>}
+                  </div>
+                  <button 
+                    className={`btn-connect-action ${isConnected ? 'connected' : ''}`}
+                    onClick={() => isConnected ? disconnectNodes(node.id, other.id) : connectNodes(node.id, other.id)}
+                  >
+                    {isConnected ? '🟢 Ligado' : '⚪ Ligar'}
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
 
         {/* Live metrics */}
         {metrics.status !== 'idle' && (

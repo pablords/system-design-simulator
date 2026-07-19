@@ -36,6 +36,8 @@ interface SimulatorStore {
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
+  connectNodes: (sourceId: string, targetId: string) => void;
+  disconnectNodes: (sourceId: string, targetId: string) => void;
   addNode: (type: ComponentType, position: { x: number; y: number }) => void;
   removeNode: (id: string) => void;
   selectNode: (id: string | null) => void;
@@ -94,6 +96,27 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
   onConnect: (connection) => {
     set((state) => ({
       edges: addEdge({ ...connection, type: 'connectionEdge', animated: true }, state.edges),
+    }));
+  },
+
+  connectNodes: (sourceId, targetId) => {
+    set((state) => {
+      const exists = state.edges.some((e) => e.source === sourceId && e.target === targetId);
+      if (exists) return {};
+      const newEdge = {
+        id: `reactflow__edge-${sourceId}-${targetId}`,
+        source: sourceId,
+        target: targetId,
+        type: 'connectionEdge',
+        animated: true,
+      };
+      return { edges: [...state.edges, newEdge] };
+    });
+  },
+
+  disconnectNodes: (sourceId, targetId) => {
+    set((state) => ({
+      edges: state.edges.filter((e) => !(e.source === sourceId && e.target === targetId)),
     }));
   },
 

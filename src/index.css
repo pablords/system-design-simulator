@@ -851,3 +851,64 @@ body { overflow: hidden; height: 100vh; }
   }
 }
 
+/* --- Conexões Rápidas Touch-Friendly --- */
+.btn-connect-container {
+  max-height: 180px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+  padding-right: 4px;
+}
+
+.btn-connect-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  background: rgba(30, 41, 59, 0.2);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-md);
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.btn-connect-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-connect-inbound-tag {
+  font-size: 9px;
+  color: var(--accent);
+  margin-left: 4px;
+}
+
+.btn-connect-action {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: var(--text-secondary);
+}
+
+.btn-connect-action:hover {
+  background: #334155;
+  color: #ffffff;
+}
+
+.btn-connect-action.connected {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.btn-connect-action.connected:hover {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
