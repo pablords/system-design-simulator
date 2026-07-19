@@ -61,6 +61,10 @@ interface SimulatorStore {
   loadPreset: (preset: 'ecommerce' | 'streaming' | 'simple-api') => void;
   clearCanvas: () => void;
   setGlobalTrafficScale: (scale: number) => void;
+
+  // Settings
+  showMinimap: boolean;
+  toggleMinimap: () => void;
 }
 
 const SPEED_INTERVALS: Record<SimulationSpeed, number> = {
@@ -76,6 +80,8 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
   edges: [],
   selectedNodeId: null,
   simulationIntervalId: null,
+  showMinimap: true,
+  toggleMinimap: () => set((state) => ({ showMinimap: !state.showMinimap })),
   simulation: {
     running: false,
     tick: 0,
