@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { addEdge, applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import type { Node, Edge, Connection, NodeChange, EdgeChange } from '@xyflow/react';
 import type { SimulatorNodeData, SimulationState, SimulationSpeed, ComponentConfig, NodeMetrics, SavedScenario } from '../types';
@@ -73,9 +74,10 @@ const SPEED_INTERVALS: Record<SimulationSpeed, number> = {
   fast: 400,
 };
 
-let nodeIdCounter = 1;
 
-export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
+export const useSimulatorStore = create<SimulatorStore>()(
+  persist(
+    (set, get) => ({
   nodes: [],
   edges: [],
   selectedNodeId: null,
@@ -129,7 +131,16 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
 
   addNode: (type, position) => {
     const def = COMPONENT_DEFINITIONS[type];
-    const id = `${type}-${nodeIdCounter++}`;
+    const existingIds = get().nodes
+      .filter((n) => n.id.startsWith(`${type}-`))
+      .map((n) => {
+        const parts = n.id.split('-');
+        const num = parseInt(parts[parts.length - 1], 10);
+        return isNaN(num) ? 0 : num;
+      });
+    const maxNum = existingIds.length > 0 ? Math.max(...existingIds) : 0;
+    const id = `${type}-${maxNum + 1}`;
+
     const newNode: Node<SimulatorNodeData> = {
       id,
       type: 'simulatorNode',
@@ -323,7 +334,35 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
       simulation: { ...state.simulation, globalTrafficScale: scale },
     }));
   },
-}));
+    }),
+    {
+      name: 'sds-session',
+      partialize: (state) => ({
+        nodes: state.nodes.map((n) => ({
+          id: n.id,
+          type: n.type,
+          position: n.position,
+          data: {
+            componentType: n.data.componentType,
+            category: n.data.category,
+            config: n.data.config,
+            metrics: createDefaultMetrics(),
+          },
+        })),
+        edges: state.edges,
+        showMinimap: state.showMinimap,
+        simulation: {
+          running: false,
+          tick: 0,
+          speed: state.simulation.speed,
+          totalRps: 0,
+          bottlenecks: [],
+          globalTrafficScale: state.simulation.globalTrafficScale,
+        },
+      }),
+    }
+  )
+);
 
 function buildPresets(): Record<string, { nodes: Node<SimulatorNodeData>[]; edges: Edge[] }> {
   const mkNode = (id: string, type: ComponentType, pos: { x: number; y: number }, configOverrides: Partial<ComponentConfig> = {}): Node<SimulatorNodeData> => {
