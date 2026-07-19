@@ -71,9 +71,21 @@ export const ConnectionEdge: React.FC<EdgeProps> = ({
               <span className="edge-metric-value">{metrics.rps.toLocaleString()}</span>
             </div>
 
+            {metrics.latencyMs > 0 && (
+              <div className="edge-metric-group" style={{ color: '#818cf8' }}>
+                <Clock size={10} className="edge-icon" />
+                <span className="edge-metric-label" style={{ color: '#818cf8' }}>Lat</span>
+                <span className="edge-metric-value" style={{ color: '#818cf8', fontWeight: 700 }}>
+                  {metrics.latencyMs >= 1000
+                    ? `${(metrics.latencyMs / 1000).toFixed(1)}s`
+                    : `${metrics.latencyMs}ms`}
+                </span>
+              </div>
+            )}
+
             {metrics.queueSize > 0 && (
               <div className="edge-metric-group warning-highlight animate-pulse-subtle">
-                <Clock size={10} className="edge-icon" />
+                <AlertTriangle size={10} className="edge-icon" />
                 <span className="edge-metric-label">Queue</span>
                 <span className="edge-metric-value">{metrics.queueSize}</span>
               </div>

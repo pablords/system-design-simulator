@@ -283,21 +283,42 @@ export function runSimulationTick(
 
     // Stateful Server Queue Depth calculation
     const prevQueue = prevMetrics?.queueDepth ?? 0;
+    const nodeTimeoutMs = cfg.timeoutMs ?? 5000;
     let queueDepth = 0;
+    let queueTimeouts = 0;
+
     if (!def.isSource && !def.isSink) {
       if (utilization > 1) {
+        // Under overload: backlog grows each tick by the unserviced requests
         const queueChange = inbound - effectiveMaxRps;
-        queueDepth = Math.max(0, prevQueue + queueChange);
-        const maxQueue = effectiveMaxRps * 10;
-        queueDepth = Math.min(queueDepth, maxQueue);
+        queueDepth = prevQueue + queueChange;
       } else {
+        // Capacity freed: drain backlog at excessCapacity per tick
+        // This is bounded naturally: can't drain more than exists
         const excessCapacity = effectiveMaxRps - inbound;
         queueDepth = Math.max(0, prevQueue - excessCapacity);
       }
-    }
-    queueDepth = Math.round(queueDepth);
 
-    // Realistic queuing delay based on service rate
+      // Hard cap at 50x capacity to prevent runaway numbers
+      queueDepth = Math.min(Math.max(0, queueDepth), effectiveMaxRps * 50);
+
+      // Proportional expiry: each tick, requests whose implied wait exceeds
+      // timeoutMs are shed from the back of the queue as timeout errors.
+      // queuingDelay = queueDepth / serviceRate * 1000 (ms)
+      // The "safe" window that won't timeout = timeoutMs * serviceRate / 1000
+      if (effectiveMaxRps > 0) {
+        const safeSlots = (nodeTimeoutMs / 1000) * effectiveMaxRps;
+        if (queueDepth > safeSlots) {
+          // Only expire a fraction per tick so the decay is visible over several ticks
+          const expiredThisTick = (queueDepth - safeSlots) * 0.4;
+          queueTimeouts = Math.round(expiredThisTick);
+          queueDepth = queueDepth - expiredThisTick;
+        }
+      }
+    }
+    queueDepth = Math.round(Math.max(0, queueDepth));
+
+    // Realistic queuing delay: W = L / lambda (Little's Law)
     const queuingDelayMs = (queueDepth > 0 && effectiveMaxRps > 0) ? (queueDepth / effectiveMaxRps) * 1000 : 0;
     const latencyMs = def.baseLatencyMs * (1 + overloadFactor * 3) + queuingDelayMs;
 
@@ -393,6 +414,17 @@ export function runSimulationTick(
           value: Math.round(inbound),
           limit: effectiveMaxRps,
           message: `Receiving ${Math.round(inbound).toLocaleString()} RPS but capacity is ${effectiveMaxRps.toLocaleString()} RPS`,
+        });
+      }
+      if (queueTimeouts > 0) {
+        bottlenecks.push({
+          nodeId: node.id,
+          nodeLabel: cfg.label,
+          type: 'rps',
+          severity: 'critical',
+          value: Math.round(queueTimeouts),
+          limit: 0,
+          message: `${Math.round(queueTimeouts).toLocaleString()} queued requests timed out (>${nodeTimeoutMs}ms wait) — lost even after scaling`,
         });
       }
       if (cpuPct >= 95) {
