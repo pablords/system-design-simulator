@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Users, HardDrive, Globe, Zap, Calculator } from 'lucide-react';
+import { X, Users, HardDrive, Globe, Zap, Calculator, Layers } from 'lucide-react';
 
-type Tab = 'traffic' | 'storage' | 'bandwidth' | 'cache';
+type Tab = 'traffic' | 'storage' | 'bandwidth' | 'cache' | 'replicas';
 
 // Helper to format bytes nicely
 const formatBytes = (bytes: number): string => {
@@ -129,6 +129,11 @@ export const CapacityCalculator: React.FC<{ onClose: () => void }> = ({ onClose 
   const [itemUnit, setItemUnit] = useState<'B' | 'KB' | 'MB'>('KB');
   const [paretoRatio, setParetoRatio] = useState(20); // 20% cached
 
+  // Replicas state
+  const [replicaRps, setReplicaRps] = useState(1000);
+  const [replicaLatency, setReplicaLatency] = useState(200); // ms
+  const [replicaPool, setReplicaPool] = useState(50); // conns
+
   // Calculations
   // 1. Traffic
   const avgQps = (dau * reqsPerUser) / 86400;
@@ -149,6 +154,10 @@ export const CapacityCalculator: React.FC<{ onClose: () => void }> = ({ onClose 
   const cacheItemSizeBytes = itemSize * bwMultipliers[itemUnit];
   const totalReadBytesPerDay = readRps * cacheItemSizeBytes * 86400;
   const cacheBytesRequired = totalReadBytesPerDay * (paretoRatio / 100);
+
+  // 5. Replicas
+  const totalConcurrency = replicaRps * (replicaLatency / 1000);
+  const replicasNeeded = Math.ceil(totalConcurrency / replicaPool);
 
   return (
     <aside className="calculator-panel">
@@ -182,6 +191,10 @@ export const CapacityCalculator: React.FC<{ onClose: () => void }> = ({ onClose 
         <button className={`calc-tab ${activeTab === 'cache' ? 'active' : ''}`} onClick={() => setActiveTab('cache')}>
           <Zap size={12} />
           Cache
+        </button>
+        <button className={`calc-tab ${activeTab === 'replicas' ? 'active' : ''}`} onClick={() => setActiveTab('replicas')}>
+          <Layers size={12} />
+          Réplicas
         </button>
       </div>
 
@@ -392,6 +405,28 @@ export const CapacityCalculator: React.FC<{ onClose: () => void }> = ({ onClose 
               <code className="formula-text">Cache RAM = Vol Diário × Pareto</code>
               <div className="formula-calc">
                 {formatBytes(totalReadBytesPerDay)} × {paretoRatio}% = <strong style={{ color: 'var(--accent)' }}>{formatBytes(cacheBytesRequired)}</strong>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'replicas' && (
+          <div>
+            <SyncInput label="RPS Alvo (Throughput)" value={replicaRps} min={10} max={100000} step={100} unit=" rps" onChange={setReplicaRps} />
+            <SyncInput label="Latência Média do Server" value={replicaLatency} min={1} max={10000} step={10} unit=" ms" onChange={setReplicaLatency} />
+            <SyncInput label="Limite de Concorrência por Réplica" value={replicaPool} min={1} max={1000} step={5} unit=" conns" onChange={setReplicaPool} />
+
+            <div className="formula-box">
+              <div className="formula-title">Concorrência Total Necessária (Little's Law):</div>
+              <code className="formula-text">Concorrência = RPS × Latência (s)</code>
+              <div className="formula-calc">
+                {replicaRps.toLocaleString()} × {(replicaLatency / 1000).toFixed(3)}s = <strong>{totalConcurrency.toFixed(1)} reqs simultâneas</strong>
+              </div>
+
+              <div className="formula-title" style={{ marginTop: '12px' }}>Fórmula de Réplicas Recomendadas:</div>
+              <code className="formula-text">Réplicas = ⌈ Concorrência / Limite por Réplica ⌉</code>
+              <div className="formula-calc">
+                ⌈ {totalConcurrency.toFixed(1)} / {replicaPool} ⌉ = <strong style={{ color: 'var(--accent)' }}>{replicasNeeded} {replicasNeeded === 1 ? 'réplica' : 'réplicas'}</strong>
               </div>
             </div>
           </div>
