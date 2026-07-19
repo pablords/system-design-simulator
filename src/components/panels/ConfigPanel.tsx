@@ -1,0 +1,205 @@
+import React from 'react';
+import { X, Server, Cpu, HardDrive, Zap, Users, Clock, Activity, Layers } from 'lucide-react';
+import { useSimulatorStore } from '../../store/simulatorStore';
+import { COMPONENT_DEFINITIONS } from '../../engine/models/ComponentModel';
+import { LineChart, Line, ResponsiveContainer, Tooltip, YAxis } from 'recharts';
+
+const Slider: React.FC<{
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  unit: string;
+  onChange: (v: number) => void;
+}> = ({ label, value, min, max, step, unit, onChange }) => (
+  <div className="config-field">
+    <div className="config-field-header">
+      <span className="config-label">{label}</span>
+      <span className="config-value">{value}{unit}</span>
+    </div>
+    <input
+      type="range"
+      min={min}
+      max={max}
+      step={step}
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className="config-slider"
+    />
+    <div className="config-range-labels">
+      <span>{min}{unit}</span>
+      <span>{max}{unit}</span>
+    </div>
+  </div>
+);
+
+export const ConfigPanel: React.FC = () => {
+  const { selectedNodeId, nodes, updateNodeConfig, selectNode } = useSimulatorStore();
+  const node = nodes.find((n) => n.id === selectedNodeId);
+
+  if (!node) return null;
+
+  const def = COMPONENT_DEFINITIONS[node.data.componentType];
+  const { config, metrics } = node.data;
+
+  const update = (key: string, value: number | string) => {
+    updateNodeConfig(node.id, { [key]: value });
+  };
+
+  const historyData = metrics.history.map((h) => ({
+    tick: h.tick,
+    CPU: h.cpuPct,
+    RAM: h.ramPct,
+    Lat: h.latencyMs,
+    RPS: h.rps,
+  }));
+
+  return (
+    <aside className="config-panel">
+      {/* Header */}
+      <div className="config-header">
+        <div className="config-header-left">
+          <span className="config-node-icon">{def.icon}</span>
+          <div>
+            <div className="config-node-type">{def.label}</div>
+            <div className="config-node-desc">{def.description}</div>
+          </div>
+        </div>
+        <button className="config-close-btn" onClick={() => selectNode(null)}>
+          <X size={16} />
+        </button>
+      </div>
+
+      <div className="config-body">
+        {/* Label */}
+        <div className="config-field">
+          <label className="config-label">Label</label>
+          <input
+            type="text"
+            value={config.label}
+            onChange={(e) => update('label', e.target.value)}
+            className="config-input"
+          />
+        </div>
+
+        <div className="config-section-title">
+          <Layers size={14} /> Capacity
+        </div>
+
+        <Slider label="Replicas" value={config.replicas} min={1} max={20} step={1} unit="×" onChange={(v) => update('replicas', v)} />
+        <Slider label="Max RPS / replica" value={config.maxRps} min={100} max={100000} step={100} unit=" rps" onChange={(v) => update('maxRps', v)} />
+
+        <div className="config-section-title">
+          <Server size={14} /> Resources
+        </div>
+        <Slider label="CPU Cores" value={config.cpuCores} min={1} max={64} step={1} unit=" cores" onChange={(v) => update('cpuCores', v)} />
+        <Slider label="RAM" value={config.ramGb} min={1} max={256} step={1} unit=" GB" onChange={(v) => update('ramGb', v)} />
+
+        {def.accumulatesStorage && (
+          <Slider label="Storage" value={config.storageGb} min={10} max={50000} step={10} unit=" GB" onChange={(v) => update('storageGb', v)} />
+        )}
+
+        {config.cacheHitRate !== undefined && (
+          <>
+            <div className="config-section-title">
+              <Zap size={14} /> Cache
+            </div>
+            <Slider
+              label="Hit Rate"
+              value={Math.round(config.cacheHitRate * 100)}
+              min={0}
+              max={100}
+              step={1}
+              unit="%"
+              onChange={(v) => update('cacheHitRate', v / 100)}
+            />
+          </>
+        )}
+
+        {/* Live metrics */}
+        {metrics.status !== 'idle' && (
+          <>
+            <div className="config-section-title">
+              <Activity size={14} /> Live Metrics
+            </div>
+            <div className="metrics-grid">
+              <div className="metric-card">
+                <Users size={14} className="metric-card-icon" />
+                <span className="metric-card-label">Inbound RPS</span>
+                <span className="metric-card-value">{metrics.inboundRps.toLocaleString()}</span>
+              </div>
+              <div className="metric-card">
+                <Cpu size={14} className="metric-card-icon" />
+                <span className="metric-card-label">CPU</span>
+                <span className="metric-card-value">{metrics.cpuPct}%</span>
+              </div>
+              <div className="metric-card">
+                <Server size={14} className="metric-card-icon" />
+                <span className="metric-card-label">RAM</span>
+                <span className="metric-card-value">{metrics.ramPct}%</span>
+              </div>
+              <div className="metric-card">
+                <Clock size={14} className="metric-card-icon" />
+                <span className="metric-card-label">Latency</span>
+                <span className="metric-card-value">{metrics.latencyMs}ms</span>
+              </div>
+              {def.accumulatesStorage && (
+                <div className="metric-card">
+                  <HardDrive size={14} className="metric-card-icon" />
+                  <span className="metric-card-label">Storage</span>
+                  <span className="metric-card-value">{metrics.storagePct}%</span>
+                </div>
+              )}
+              {metrics.queueDepth > 0 && (
+                <div className="metric-card critical">
+                  <Zap size={14} className="metric-card-icon" />
+                  <span className="metric-card-label">Queue Depth</span>
+                  <span className="metric-card-value">{metrics.queueDepth.toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+
+            {historyData.length > 2 && (
+              <div className="chart-container">
+                <div className="chart-title">CPU & RAM History</div>
+                <ResponsiveContainer width="100%" height={80}>
+                  <LineChart data={historyData}>
+                    <YAxis domain={[0, 100]} hide />
+                    <Tooltip
+                      contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 11 }}
+                      labelFormatter={(l) => `Tick ${l}`}
+                    />
+                    <Line type="monotone" dataKey="CPU" stroke="#f59e0b" dot={false} strokeWidth={2} />
+                    <Line type="monotone" dataKey="RAM" stroke="#6366f1" dot={false} strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+                <div className="chart-legend">
+                  <span className="legend-item" style={{ color: '#f59e0b' }}>● CPU</span>
+                  <span className="legend-item" style={{ color: '#6366f1' }}>● RAM</span>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        <div className="config-summary">
+          <div className="config-summary-row">
+            <span>Total Capacity</span>
+            <strong>{(config.maxRps * config.replicas).toLocaleString()} RPS</strong>
+          </div>
+          <div className="config-summary-row">
+            <span>Total RAM</span>
+            <strong>{config.ramGb * config.replicas} GB</strong>
+          </div>
+          {def.accumulatesStorage && (
+            <div className="config-summary-row">
+              <span>Total Storage</span>
+              <strong>{config.storageGb >= 1000 ? `${(config.storageGb / 1000).toFixed(1)} TB` : `${config.storageGb} GB`}</strong>
+            </div>
+          )}
+        </div>
+      </div>
+    </aside>
+  );
+};
