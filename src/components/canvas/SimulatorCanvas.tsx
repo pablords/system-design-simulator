@@ -14,7 +14,7 @@ import { useSimulatorStore } from '../../store/simulatorStore';
 import type { ComponentType } from '../../types';
 
 import { ConnectionEdge } from './ConnectionEdge';
-import { Map, MapOff } from 'lucide-react';
+import { Map, EyeOff } from 'lucide-react';
 
 const nodeTypes = { simulatorNode: ComponentNode };
 const edgeTypes = { connectionEdge: ConnectionEdge };
@@ -115,7 +115,7 @@ const CanvasInner: React.FC = () => {
       >
         {showMinimap ? (
           <>
-            <MapOff size={13} />
+            <EyeOff size={13} />
             <span>Esconder Mapa</span>
           </>
         ) : (
