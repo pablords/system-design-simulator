@@ -4,6 +4,7 @@ import type { ComponentCategory } from '../../types';
 import type { ComponentDefinition } from '../../engine/models/ComponentModel';
 import { COMPONENT_DEFINITIONS, CATEGORIES } from '../../engine/models/ComponentModel';
 import { ServiceIcon } from '../ui/ServiceIcon';
+import { useSimulatorStore } from '../../store/simulatorStore';
 
 interface ComponentCardProps {
   def: ComponentDefinition;
