@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Toolbar } from './components/ui/Toolbar';
 import { ComponentPalette } from './components/sidebar/ComponentPalette';
 import { SimulatorCanvas } from './components/canvas/SimulatorCanvas';
@@ -15,15 +15,38 @@ function App() {
   const [showCalculator, setShowCalculator] = useState(false);
   const { selectedNodeId } = useSimulatorStore();
 
+  // On tablets/mobile, if a node is selected, close the calculator to avoid layout clutter
+  useEffect(() => {
+    if (selectedNodeId && window.innerWidth <= 1200) {
+      setShowCalculator(false);
+    }
+  }, [selectedNodeId]);
+
+  const handleTogglePalette = () => {
+    const nextVal = !isPaletteOpen;
+    setIsPaletteOpen(nextVal);
+    if (nextVal && window.innerWidth <= 1200) {
+      setShowCalculator(false);
+    }
+  };
+
+  const handleToggleCalculator = () => {
+    const nextVal = !showCalculator;
+    setShowCalculator(nextVal);
+    if (nextVal && window.innerWidth <= 1200) {
+      setIsPaletteOpen(false);
+    }
+  };
+
   return (
     <div className="app-shell">
       <Toolbar
         onSave={() => setShowSave(true)}
         onLoad={() => setShowLoad(true)}
         isPaletteOpen={isPaletteOpen}
-        onTogglePalette={() => setIsPaletteOpen(!isPaletteOpen)}
+        onTogglePalette={handleTogglePalette}
         showCalculator={showCalculator}
-        onToggleCalculator={() => setShowCalculator(!showCalculator)}
+        onToggleCalculator={handleToggleCalculator}
       />
 
       <div className="app-body">

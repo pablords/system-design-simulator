@@ -651,7 +651,7 @@ body { overflow: hidden; height: 100vh; }
 }
 
 /* --- Media Query: iPads / Tablets (Modo Paisagem e Retrato) --- */
-@media (max-width: 1024px) {
+@media (max-width: 1200px) {
   /* Ocultar texto descritivo dos botões para poupar espaço */
   .btn-text {
     display: none;

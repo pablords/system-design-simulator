@@ -103,14 +103,15 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
     set((state) => {
       const exists = state.edges.some((e) => e.source === sourceId && e.target === targetId);
       if (exists) return {};
-      const newEdge = {
-        id: `reactflow__edge-${sourceId}-${targetId}`,
+      const newConnection = {
         source: sourceId,
         target: targetId,
-        type: 'connectionEdge',
-        animated: true,
+        sourceHandle: null,
+        targetHandle: null,
       };
-      return { edges: [...state.edges, newEdge] };
+      return {
+        edges: addEdge({ ...newConnection, type: 'connectionEdge', animated: true }, state.edges),
+      };
     });
   },
 
