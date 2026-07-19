@@ -14,6 +14,7 @@ interface ToolbarProps {
 export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen, onTogglePalette, showCalculator, onToggleCalculator }) => {
   const { simulation, startSimulation, pauseSimulation, resetSimulation, setSimulationSpeed, clearCanvas, loadPreset, setGlobalTrafficScale } = useSimulatorStore();
   const [showPresets, setShowPresets] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [tempGlobalLoad, setTempGlobalLoad] = useState(String(simulation.globalTrafficScale ?? 100));
 
   React.useEffect(() => {
@@ -141,7 +142,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen,
         </div>
       </div>
 
-      <div className="toolbar-right">
+      {/* Desktop View (hidden on iPad/mobile) */}
+      <div className="toolbar-right desktop-only">
         {/* Estimativas */}
         <button className={`btn btn-ghost ${showCalculator ? 'active' : ''}`} onClick={onToggleCalculator} title="Calculadora de Capacidades (Conta de Padaria)">
           <Calculator size={16} />
@@ -183,6 +185,53 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen,
           <FolderOpen size={16} />
           <span className="btn-text">Load</span>
         </button>
+      </div>
+
+      {/* Tablet/Mobile View (visible on iPad/mobile <= 1200px) */}
+      <div className="toolbar-right tablet-only">
+        <div className="relative">
+          <button className="btn btn-ghost" onClick={() => setShowMobileMenu(!showMobileMenu)}>
+            <Menu size={16} />
+            <span style={{ marginLeft: 4 }}>Menu</span>
+            <ChevronDown size={14} style={{ marginLeft: 2 }} />
+          </button>
+          {showMobileMenu && (
+            <div className="dropdown" onMouseLeave={() => setShowMobileMenu(false)} style={{ right: 0, left: 'auto', minWidth: '220px' }}>
+              <div className="dropdown-header">Ferramentas</div>
+              <button className={`dropdown-item ${showCalculator ? 'active' : ''}`} onClick={() => { onToggleCalculator(); setShowMobileMenu(false); }}>
+                <Calculator size={14} style={{ marginRight: 6 }} />
+                Estimativas (Calculadora)
+              </button>
+              
+              <div className="dropdown-divider" />
+              <div className="dropdown-header">Presets</div>
+              <button className="dropdown-item" onClick={() => { loadPreset('simple-api'); setShowMobileMenu(false); }}>
+                🔌 Simple REST API
+              </button>
+              <button className="dropdown-item" onClick={() => { loadPreset('ecommerce'); setShowMobileMenu(false); }}>
+                🛒 E-commerce Platform
+              </button>
+              <button className="dropdown-item" onClick={() => { loadPreset('streaming'); setShowMobileMenu(false); }}>
+                📺 Video Streaming
+              </button>
+              
+              <div className="dropdown-divider" />
+              <div className="dropdown-header">Cenário</div>
+              <button className="dropdown-item" onClick={() => { onSave(); setShowMobileMenu(false); }}>
+                <Save size={14} style={{ marginRight: 6 }} />
+                Salvar Cenário
+              </button>
+              <button className="dropdown-item" onClick={() => { onLoad(); setShowMobileMenu(false); }}>
+                <FolderOpen size={14} style={{ marginRight: 6 }} />
+                Carregar Cenário
+              </button>
+              <button className="dropdown-item danger" onClick={() => { clearCanvas(); setShowMobileMenu(false); }}>
+                <Trash2 size={14} style={{ marginRight: 6 }} />
+                Limpar Canvas
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
