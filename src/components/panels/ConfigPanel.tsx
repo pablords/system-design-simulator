@@ -92,7 +92,7 @@ const Slider: React.FC<{
 };
 
 export const ConfigPanel: React.FC = () => {
-  const { selectedNodeId, nodes, edges, updateNodeConfig, selectNode, connectNodes, disconnectNodes } = useSimulatorStore();
+  const { selectedNodeId, nodes, updateNodeConfig, selectNode } = useSimulatorStore();
   const node = nodes.find((n) => n.id === selectedNodeId);
 
   if (!node) return null;
@@ -251,42 +251,9 @@ export const ConfigPanel: React.FC = () => {
             </div>
           ) : (
             nodes.filter(n => n.id !== node.id).map(other => {
-              const otherDef = COMPONENT_DEFINITIONS[other.data.componentType];
-              
-              // Direções possíveis baseadas nas definições de origem/destino
-              const canConnectAsOutput = !def.isSink && !otherDef.isSource;
-              const canConnectAsInput = !def.isSource && !otherDef.isSink;
-              
-              const isConnectedOutput = edges.some(e => e.source === node.id && e.target === other.id);
-              const isConnectedInput = edges.some(e => e.source === other.id && e.target === node.id);
-              
               return (
-                <div key={other.id} className="btn-connect-row" style={{ flexDirection: 'column', gap: '8px', alignItems: 'stretch', padding: '8px 10px' }}>
-                  <div className="btn-connect-info" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '12px' }}>{otherDef.icon}</span>
-                    <span style={{ fontWeight: 600 }}>{other.data.config.label || otherDef.label}</span>
-                  </div>
-                  
-                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                    {canConnectAsOutput && (
-                      <button 
-                        className={`btn-connect-action ${isConnectedOutput ? 'connected' : ''}`}
-                        style={{ flex: 1, fontSize: '10.5px', padding: '4px 6px' }}
-                        onClick={() => isConnectedOutput ? disconnectNodes(node.id, other.id) : connectNodes(node.id, other.id)}
-                      >
-                        {isConnectedOutput ? '🟢 Saída Ativa' : '⚪ Ligar Saída ➡️'}
-                      </button>
-                    )}
-                    {canConnectAsInput && (
-                      <button 
-                        className={`btn-connect-action ${isConnectedInput ? 'connected' : ''}`}
-                        style={{ flex: 1, fontSize: '10.5px', padding: '4px 6px' }}
-                        onClick={() => isConnectedInput ? disconnectNodes(other.id, node.id) : connectNodes(other.id, node.id)}
-                      >
-                        {isConnectedInput ? '🟢 Entrada Ativa' : '⚪ Ligar Entrada ⬅️'}
-                      </button>
-                    )}
-                  </div>
+                <div key={other.id} style={{ color: '#fbbf24', padding: '8px', border: '1px solid #fbbf24', margin: '4px 0', borderRadius: '4px', fontSize: '12px' }}>
+                  [TEST] Node: {other.id} - Label: {other.data.config.label || other.id}
                 </div>
               );
             })
