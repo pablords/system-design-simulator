@@ -64,6 +64,10 @@ export interface ComponentConfig {
   timeoutMs?: number;      // source request timeout limit
   rateLimiterEnabled?: boolean; // semaphore / rate limiter active
   writeRatio?: number;     // 0-1, write ratio of generated traffic (sources only)
+  errorRate?: number;      // manual failure rate injected (0 to 1)
+  circuitBreakerEnabled?: boolean; // CB enabled
+  cbFailureThreshold?: number;     // failure rate threshold (0 to 1)
+  cbSleepWindowTicks?: number;     // ticks in OPEN before going HALF-OPEN
 }
 
 export interface EdgeMetrics {
@@ -73,6 +77,7 @@ export interface EdgeMetrics {
   queueSize: number;
   latencyMs: number;
   timeoutsPerSecond: number;
+  failuresPerSecond?: number; // failed requests per second on edge
   status: 'ok' | 'warning' | 'critical';
 }
 
@@ -96,6 +101,12 @@ export interface NodeMetrics {
   endToEndLatencyMs?: number;
   consecutiveOverloadTicks?: number;
   restartCooldownTicks?: number;
+  
+  // Resilience metrics
+  successRps?: number;
+  failedRps?: number;
+  cbState?: 'CLOSED' | 'OPEN' | 'HALF-OPEN';
+  cbOpenTimer?: number;
 }
 
 export interface MetricSnapshot {
@@ -104,6 +115,8 @@ export interface MetricSnapshot {
   ramPct: number;
   latencyMs: number;
   rps: number;
+  successRps?: number;
+  failedRps?: number;
 }
 
 export interface Bottleneck {

@@ -104,6 +104,71 @@ export const ConfigPanel: React.FC = () => {
     updateNodeConfig(node.id, { [key]: value });
   };
 
+  const generateSpans = () => {
+    interface TraceSpan {
+      id: string;
+      label: string;
+      componentType: string;
+      startMs: number;
+      durationMs: number;
+      depth: number;
+      status: 'ok' | 'error';
+    }
+
+    const spans: TraceSpan[] = [];
+    const visited = new Set<string>();
+
+    function buildTrace(nodeId: string, currentOffset: number, depth: number) {
+      if (visited.has(nodeId)) return;
+      visited.add(nodeId);
+
+      const currNode = nodes.find((n) => n.id === nodeId);
+      if (!currNode) return;
+
+      const currMetrics = currNode.data.metrics;
+      const currCfg = currNode.data.config;
+
+      const isError = currMetrics.cbState === 'OPEN' || (currMetrics.failedRps ?? 0) > ((currMetrics.inboundRps ?? 0) * 0.1) || currMetrics.status === 'critical';
+      const nodeLatency = currMetrics.latencyMs || 1;
+
+      const nodeOutEdges = edges.filter((e) => e.source === nodeId);
+      const nextOffset = currentOffset + nodeLatency;
+      let maxChildDuration = 0;
+
+      let sequentialOffset = nextOffset;
+
+      for (const edge of nodeOutEdges) {
+        const edgeWait = (edge.data?.metrics as any)?.latencyMs ?? 0;
+        const targetId = edge.target;
+        
+        const callStart = sequentialOffset;
+        buildTrace(targetId, callStart + edgeWait, depth + 1);
+        
+        const targetNodeMetrics = nodes.find((n) => n.id === targetId)?.data.metrics;
+        const targetLatency = targetNodeMetrics?.latencyMs ?? 0;
+        const childTotalDuration = edgeWait + (targetNodeMetrics?.endToEndLatencyMs ?? targetLatency);
+        
+        sequentialOffset += childTotalDuration;
+        maxChildDuration = Math.max(maxChildDuration, (callStart - nextOffset) + childTotalDuration);
+      }
+
+      const spanDuration = nodeLatency + maxChildDuration;
+
+      spans.push({
+        id: nodeId,
+        label: currCfg.label,
+        componentType: currNode.data.componentType,
+        startMs: currentOffset,
+        durationMs: spanDuration,
+        depth,
+        status: isError ? 'error' : 'ok',
+      });
+    }
+
+    buildTrace(node.id, 0, 0);
+    return spans.sort((a, b) => a.startMs - b.startMs || a.depth - b.depth);
+  };
+
   const historyData = metrics.history.map((h) => ({
     tick: h.tick,
     CPU: h.cpuPct,
@@ -200,6 +265,51 @@ export const ConfigPanel: React.FC = () => {
             )}
           </>
         )}
+
+        {/* Resilience & Injected Errors Section */}
+        <div className="config-section-title">
+          <Zap size={14} /> Resilience & Errors
+        </div>
+        <div className="config-field" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0', marginBottom: 8 }}>
+          <span className="config-label">Circuit Breaker</span>
+          <input
+            type="checkbox"
+            checked={!!config.circuitBreakerEnabled}
+            onChange={(e) => update('circuitBreakerEnabled', e.target.checked)}
+            style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--accent)' }}
+          />
+        </div>
+        {config.circuitBreakerEnabled && (
+          <>
+            <Slider
+              label="CB Failure Threshold"
+              value={Math.round((config.cbFailureThreshold ?? 0.5) * 100)}
+              min={10}
+              max={100}
+              step={5}
+              unit="%"
+              onChange={(v) => update('cbFailureThreshold', v / 100)}
+            />
+            <Slider
+              label="CB Cooldown Window"
+              value={config.cbSleepWindowTicks ?? 5}
+              min={1}
+              max={30}
+              step={1}
+              unit="s"
+              onChange={(v) => update('cbSleepWindowTicks', v)}
+            />
+          </>
+        )}
+        <Slider
+          label="Injected Error Rate"
+          value={Math.round((config.errorRate ?? 0) * 100)}
+          min={0}
+          max={100}
+          step={5}
+          unit="%"
+          onChange={(v) => update('errorRate', v / 100)}
+        />
 
         {/* Resources Section (Conditional) */}
         {(config.cpuCores !== undefined || config.ramGb !== undefined) && (
@@ -349,6 +459,29 @@ export const ConfigPanel: React.FC = () => {
                   )}
                 </span>
               </div>
+              <div className="metric-card">
+                <Activity size={14} className="metric-card-icon" style={{ color: (metrics.failedRps ?? 0) > 0 ? '#ef4444' : '#22c55e' }} />
+                <span className="metric-card-label">Success Rate</span>
+                <span className="metric-card-value">
+                  {metrics.inboundRps > 0
+                    ? `${Math.round(((metrics.successRps ?? metrics.inboundRps) / metrics.inboundRps) * 1000) / 10}%`
+                    : '100%'}
+                  <span style={{ fontSize: 9, display: 'block', color: 'var(--text-muted)', fontWeight: 400, marginTop: 2 }}>
+                    OK: {Math.round(metrics.successRps ?? metrics.inboundRps).toLocaleString()} | Err: {Math.round(metrics.failedRps ?? 0).toLocaleString()}
+                  </span>
+                </span>
+              </div>
+              {config.circuitBreakerEnabled && (
+                <div className={`metric-card cb-state-${metrics.cbState || 'CLOSED'}`}>
+                  <Zap size={14} className="metric-card-icon" />
+                  <span className="metric-card-label">Circuit Breaker</span>
+                  <span className="metric-card-value" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span className={`cb-indicator cb-indicator-${metrics.cbState || 'CLOSED'}`} />
+                    {metrics.cbState || 'CLOSED'}
+                    {metrics.cbState === 'OPEN' && metrics.cbOpenTimer !== undefined && ` (${metrics.cbOpenTimer}s)`}
+                  </span>
+                </div>
+              )}
               {config.cpuCores !== undefined && (
                 <div className="metric-card">
                   <Cpu size={14} className="metric-card-icon" />
@@ -383,6 +516,84 @@ export const ConfigPanel: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Distributed Trace Waterfall */}
+            {(() => {
+              const spans = generateSpans();
+              if (spans.length === 0) return null;
+              
+              const totalDuration = Math.max(...spans.map(s => s.startMs + s.durationMs));
+              const scale = totalDuration > 0 ? totalDuration : 1;
+              
+              return (
+                <div style={{ marginTop: '16px', borderTop: '1px solid #1e293b', paddingTop: '16px' }}>
+                  <div className="config-section-title" style={{ marginBottom: '6px' }}>
+                    <Zap size={14} style={{ color: '#818cf8' }} /> Distributed Trace Waterfall
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '8px', lineHeight: '1.4' }}>
+                    Waterfall originating from this node:
+                  </div>
+                  <div className="trace-container" style={{ background: '#090d16', border: '1px solid #1e293b', borderRadius: '6px', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {/* Timeline Header */}
+                    <div style={{ display: 'flex', borderBottom: '1px solid #1e293b', paddingBottom: '4px', marginBottom: '4px', fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      <div style={{ flex: 1 }}>Component / Span</div>
+                      <div style={{ width: '120px', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>0ms</span>
+                        <span>{Math.round(totalDuration / 2)}ms</span>
+                        <span>{Math.round(totalDuration)}ms</span>
+                      </div>
+                    </div>
+                    
+                    {/* Spans List */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {spans.map((s) => {
+                        const leftPct = (s.startMs / scale) * 100;
+                        const widthPct = Math.max(1, (s.durationMs / scale) * 100);
+                        const isErr = s.status === 'error';
+                        
+                        return (
+                          <div key={s.id} style={{ display: 'flex', alignItems: 'center', fontSize: '10px' }}>
+                            {/* Name Label */}
+                            <div style={{ flex: 1, paddingLeft: `${s.depth * 10}px`, display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <span style={{ fontSize: '8px', color: isErr ? '#ef4444' : '#818cf8' }}>
+                                {s.depth > 0 ? '↳' : '●'}
+                              </span>
+                              <span style={{ fontWeight: 500, color: isErr ? '#fca5a5' : '#ffffff' }} title={s.label}>
+                                {s.label}
+                              </span>
+                            </div>
+                            
+                            {/* Bar Timeline */}
+                            <div style={{ width: '120px', height: '14px', position: 'relative', background: 'rgba(255,255,255,0.02)', borderRadius: '2px', overflow: 'hidden' }}>
+                              <div 
+                                style={{
+                                  position: 'absolute',
+                                  left: `${leftPct}%`,
+                                  width: `${widthPct}%`,
+                                  height: '100%',
+                                  background: isErr 
+                                    ? 'linear-gradient(90deg, #ef4444, #b91c1c)' 
+                                    : 'linear-gradient(90deg, #6366f1, #3b82f6)',
+                                  borderRadius: '2px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  paddingLeft: '4px',
+                                  boxSizing: 'border-box'
+                                }}
+                                title={`${s.label}: ${Math.round(s.durationMs)}ms`}
+                              />
+                              <span style={{ position: 'absolute', right: '4px', fontSize: '8px', fontFamily: 'var(--font-mono)', lineHeight: '14px', color: isErr ? '#fca5a5' : '#94a3b8', zIndex: 1 }}>
+                                {Math.round(s.durationMs)}ms
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {historyData.length > 2 && (config.cpuCores !== undefined || config.ramGb !== undefined) && (
               <div className="chart-container">

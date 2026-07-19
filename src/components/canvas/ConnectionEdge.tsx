@@ -151,6 +151,14 @@ export const ConnectionEdge: React.FC<EdgeProps> = ({
                   <span className="edge-metric-value">{metrics.timeoutsPerSecond}</span>
                 </div>
               )}
+
+              {metrics.failuresPerSecond !== undefined && metrics.failuresPerSecond > 0 && (
+                <div className="edge-metric-group critical-highlight animate-flash-fast" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#f87171' }}>
+                  <AlertTriangle size={10} className="edge-icon" />
+                  <span className="edge-metric-label">Err/s</span>
+                  <span className="edge-metric-value">{metrics.failuresPerSecond}</span>
+                </div>
+              )}
             </>
           )}
         </div>

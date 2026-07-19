@@ -44,8 +44,17 @@ export function runSimulationTick(
   const overloadCounters: Record<string, number> = {};
   const crashedNodesSet = new Set<string>();
 
+  // Circuit Breaker state variables
+  const cbStateMap: Record<string, 'CLOSED' | 'OPEN' | 'HALF-OPEN'> = {};
+  const cbOpenTimerMap: Record<string, number> = {};
+  const cbOpenNodesSet = new Set<string>();
+  const cbHalfOpenNodesSet = new Set<string>();
+
   for (const node of nodes) {
     const prev = node.data.metrics;
+    const cfg = node.data.config;
+    
+    // Crashes
     let cooldown = prev?.restartCooldownTicks ?? 0;
     let overload = prev?.consecutiveOverloadTicks ?? 0;
 
@@ -59,6 +68,33 @@ export function runSimulationTick(
       crashCooldowns[node.id] = 0;
     }
     overloadCounters[node.id] = overload;
+
+    // Circuit Breakers
+    if (cfg.circuitBreakerEnabled) {
+      let state = prev?.cbState ?? 'CLOSED';
+      let timer = prev?.cbOpenTimer ?? 0;
+
+      if (state === 'OPEN') {
+        if (timer > 0) {
+          timer -= 1;
+        }
+        if (timer <= 0) {
+          state = 'HALF-OPEN';
+        }
+      }
+
+      cbStateMap[node.id] = state;
+      cbOpenTimerMap[node.id] = timer;
+
+      if (state === 'OPEN') {
+        cbOpenNodesSet.add(node.id);
+      } else if (state === 'HALF-OPEN') {
+        cbHalfOpenNodesSet.add(node.id);
+      }
+    } else {
+      cbStateMap[node.id] = 'CLOSED';
+      cbOpenTimerMap[node.id] = 0;
+    }
   }
 
   // Step 1: Nominal BFS propagation of load/RPS (Read & Write separated)
@@ -171,12 +207,15 @@ export function runSimulationTick(
   // Step 2: Connection Pool and Timeout calculations per target node
   const updatedEdgeMetrics: Record<string, EdgeMetrics> = {};
   const edgeTimeoutsMap: Record<string, number> = {};
+  const edgeFailuresMap: Record<string, number> = {};
   const edgeQueuesMap: Record<string, number> = {};
   const edgeWaitTimeMap: Record<string, number> = {};
 
-  // Initialize edge wait times to 0
+  // Initialize edge wait times and failures to 0
   for (const edge of edges) {
     edgeWaitTimeMap[edge.id] = 0;
+    edgeFailuresMap[edge.id] = 0;
+    edgeTimeoutsMap[edge.id] = 0;
   }
 
   for (const node of nodes) {
@@ -194,7 +233,8 @@ export function runSimulationTick(
     // If destination node is currently crashed/down
     if (crashedNodesSet.has(node.id)) {
       for (const edge of targetInEdges) {
-        edgeTimeoutsMap[edge.id] = edgeRpsMap[edge.id] ?? 0; // 100% timeouts
+        edgeFailuresMap[edge.id] = edgeRpsMap[edge.id] ?? 0; // 100% fail-fast
+        edgeTimeoutsMap[edge.id] = 0;
         edgeQueuesMap[edge.id] = 0;
         edgeWaitTimeMap[edge.id] = 0;
         edgeRpsMap[edge.id] = 0; // no successful requests flow through
@@ -202,6 +242,34 @@ export function runSimulationTick(
         edgeWriteRpsMap[edge.id] = 0;
       }
       continue;
+    }
+
+    // If destination node has Circuit Breaker OPEN: fail fast immediately
+    if (cbOpenNodesSet.has(node.id)) {
+      for (const edge of targetInEdges) {
+        edgeFailuresMap[edge.id] = edgeRpsMap[edge.id] ?? 0; // 100% fail-fast
+        edgeTimeoutsMap[edge.id] = 0;
+        edgeQueuesMap[edge.id] = 0;
+        edgeWaitTimeMap[edge.id] = 0;
+        edgeRpsMap[edge.id] = 0;
+        edgeReadRpsMap[edge.id] = 0;
+        edgeWriteRpsMap[edge.id] = 0;
+      }
+      continue;
+    }
+
+    // If destination node is HALF-OPEN: fail-fast 80%, trial 20%
+    if (cbHalfOpenNodesSet.has(node.id)) {
+      for (const edge of targetInEdges) {
+        const edgeRps = edgeRpsMap[edge.id] ?? 0;
+        const failedPart = edgeRps * 0.8;
+        const allowedPart = edgeRps * 0.2;
+
+        edgeFailuresMap[edge.id] = failedPart;
+        edgeRpsMap[edge.id] = allowedPart;
+        edgeReadRpsMap[edge.id] = (edgeReadRpsMap[edge.id] ?? 0) * 0.2;
+        edgeWriteRpsMap[edge.id] = (edgeWriteRpsMap[edge.id] ?? 0) * 0.2;
+      }
     }
 
     // Connection pool logic
@@ -308,16 +376,20 @@ export function runSimulationTick(
     const def = COMPONENT_DEFINITIONS[node.data.componentType];
     const cfg = node.data.config;
     const prevMetrics = node.data.metrics;
+    const targetInEdges = inboundEdges[node.id] ?? [];
 
     // Check if currently crashed/restarting
     if (crashedNodesSet.has(node.id)) {
       const cooldown = crashCooldowns[node.id];
+      const nominalInbound = inboundRpsMap[node.id] ?? 0;
       const snapshot: MetricSnapshot = {
         tick,
         cpuPct: 10,
         ramPct: 20,
         latencyMs: 0,
         rps: 0,
+        successRps: 0,
+        failedRps: Math.round(nominalInbound),
       };
       const history = [...(prevMetrics?.history ?? []), snapshot].slice(-MAX_HISTORY);
 
@@ -336,6 +408,10 @@ export function runSimulationTick(
         consecutiveOverloadTicks: 0,
         restartCooldownTicks: cooldown,
         endToEndLatencyMs: 0,
+        successRps: 0,
+        failedRps: Math.round(nominalInbound),
+        cbState: cbStateMap[node.id],
+        cbOpenTimer: cbOpenTimerMap[node.id],
       };
 
       bottlenecks.push({
@@ -434,8 +510,57 @@ export function runSimulationTick(
       }
     }
 
+    // --- Resilience & Failure Calculations ---
+    const injectedErrorRate = cfg.errorRate ?? 0;
+    const injectedErrors = inbound * injectedErrorRate;
+
+    // Overload error rate: if utilization is above 100%, we start shedding/failing requests
+    const overloadFailureRate = (utilization > 1 && !cfg.rateLimiterEnabled) ? clamp((utilization - 1) * 0.5, 0, 0.8) : 0;
+    const overloadErrors = inbound * overloadFailureRate;
+
+    const localFailures = Math.min(inbound, injectedErrors + overloadErrors + queueTimeouts);
+    const localSuccess = Math.max(0, inbound - localFailures);
+
+    const processSuccessRatio = inbound > 0 ? localSuccess / inbound : 1.0;
+
+    outboundRead *= processSuccessRatio;
+    outboundWrite *= processSuccessRatio;
     let outboundRps = outboundRead + outboundWrite;
     if (outboundTargets.length === 0) outboundRps = 0;
+
+    // Circuit Breaker state transitions
+    let cbState = cbStateMap[node.id];
+    let cbOpenTimer = cbOpenTimerMap[node.id];
+
+    if (cfg.circuitBreakerEnabled) {
+      // Sum connection timeouts targeting this node
+      const incomingTimeouts = targetInEdges.reduce((sum, edge) => sum + (edgeTimeoutsMap[edge.id] ?? 0), 0);
+
+      if (cbState === 'CLOSED') {
+        const totalRequests = inbound + incomingTimeouts;
+        const totalFailures = localFailures + incomingTimeouts;
+        const failureRate = totalRequests > 0 ? totalFailures / totalRequests : 0;
+
+        if (totalRequests >= 10 && failureRate > (cfg.cbFailureThreshold ?? 0.5)) {
+          cbState = 'OPEN';
+          cbOpenTimer = cfg.cbSleepWindowTicks ?? 5;
+          cbOpenTimerMap[node.id] = cbOpenTimer;
+        }
+      } else if (cbState === 'HALF-OPEN') {
+        if (inbound > 0) {
+          const trialFailRate = localFailures / inbound;
+          if (trialFailRate > (cfg.cbFailureThreshold ?? 0.5) || localFailures > 0) {
+            cbState = 'OPEN';
+            cbOpenTimer = cfg.cbSleepWindowTicks ?? 5;
+            cbOpenTimerMap[node.id] = cbOpenTimer;
+          } else {
+            cbState = 'CLOSED';
+            cbOpenTimer = 0;
+          }
+        }
+      }
+      cbStateMap[node.id] = cbState;
+    }
 
     // Crash and failover check:
     // If CPU or RAM hits >= 99% for multiple consecutive ticks, trigger a restart.
@@ -465,6 +590,8 @@ export function runSimulationTick(
       ramPct: Math.round(ramPct),
       latencyMs: Math.round(latencyMs * 10) / 10,
       rps: Math.round(inbound),
+      successRps: Math.round(localSuccess),
+      failedRps: Math.round(localFailures),
     };
     const history = [...(prevMetrics?.history ?? []), snapshot].slice(-MAX_HISTORY);
 
@@ -482,6 +609,10 @@ export function runSimulationTick(
       history,
       consecutiveOverloadTicks: overloadTicks,
       restartCooldownTicks: restartCooldown,
+      successRps: Math.round(localSuccess),
+      failedRps: Math.round(localFailures),
+      cbState: cbStateMap[node.id],
+      cbOpenTimer: cbOpenTimerMap[node.id],
     };
 
     if (def.isSource) totalRps += inbound;
@@ -575,27 +706,108 @@ export function runSimulationTick(
     }
   }
 
+  // Step 3.5: Compute Cumulative End-to-End Success Rate
+  const memoSuccessRate: Record<string, number> = {};
+  function getE2ESuccessRate(nodeId: string): number {
+    if (memoSuccessRate[nodeId] !== undefined) return memoSuccessRate[nodeId];
+
+    const nodeMetrics = updatedMetrics[nodeId];
+    if (!nodeMetrics) return 1.0;
+
+    const node = nodeMap.get(nodeId);
+    if (!node) return 1.0;
+
+    const def = COMPONENT_DEFINITIONS[node.data.componentType];
+    const targets = outboundEdges[nodeId] ?? [];
+
+    const localInbound = nodeMetrics.inboundRps;
+    const localSuccess = nodeMetrics.successRps ?? localInbound;
+    const localSuccessRate = localInbound > 0 ? (localSuccess / localInbound) : 1.0;
+
+    if (def.isSink || targets.length === 0) {
+      memoSuccessRate[nodeId] = localSuccessRate;
+      return localSuccessRate;
+    }
+
+    let totalEdgeRps = 0;
+    let totalE2ESuccessRps = 0;
+
+    for (const edge of targets) {
+      const edgeRps = edgeRpsMap[edge.id] ?? 0;
+      const timeouts = edgeTimeoutsMap[edge.id] ?? 0;
+      const failFast = edgeFailuresMap[edge.id] ?? 0;
+
+      const reachingTargetRps = Math.max(0, edgeRps - timeouts - failFast);
+      const targetSuccessRate = getE2ESuccessRate(edge.target);
+
+      totalE2ESuccessRps += reachingTargetRps * targetSuccessRate;
+      totalEdgeRps += edgeRps;
+    }
+
+    const downstreamSuccessRate = totalEdgeRps > 0 ? (totalE2ESuccessRps / totalEdgeRps) : 1.0;
+    const e2eSuccessRate = localSuccessRate * downstreamSuccessRate;
+    memoSuccessRate[nodeId] = e2eSuccessRate;
+    return e2eSuccessRate;
+  }
+
+  // Update E2E success/failed RPS for all nodes
+  for (const node of nodes) {
+    if (updatedMetrics[node.id]) {
+      const rate = getE2ESuccessRate(node.id);
+      const inbound = updatedMetrics[node.id].inboundRps;
+      updatedMetrics[node.id].successRps = Math.round(inbound * rate * 10) / 10;
+      updatedMetrics[node.id].failedRps = Math.round(inbound * (1 - rate) * 10) / 10;
+
+      const history = updatedMetrics[node.id].history;
+      if (history && history.length > 0) {
+        const lastSnapshot = history[history.length - 1];
+        lastSnapshot.successRps = updatedMetrics[node.id].successRps;
+        lastSnapshot.failedRps = updatedMetrics[node.id].failedRps;
+      }
+    }
+  }
+
   // Step 4: Populate edge metrics
   for (const edge of edges) {
     const edgeRps = edgeRpsMap[edge.id] ?? 0;
     const queueSize = edgeQueuesMap[edge.id] ?? 0;
     const timeouts = edgeTimeoutsMap[edge.id] ?? 0;
+    const failFast = edgeFailuresMap[edge.id] ?? 0;
     const targetNode = nodeMap.get(edge.target);
     const targetLatency = updatedMetrics[edge.target]?.latencyMs ?? 0;
     const waitTime = edgeWaitTimeMap[edge.id] ?? 0;
 
+    // E2E success rate of target node to compute downstream failures
+    const targetSuccessRate = memoSuccessRate[edge.target] ?? 1.0;
+    const reachingTargetRps = Math.max(0, edgeRps - timeouts - failFast);
+    const downstreamFailures = reachingTargetRps * (1 - targetSuccessRate);
+    const totalEdgeFailures = timeouts + failFast + downstreamFailures;
+
     let status: 'ok' | 'warning' | 'critical' = 'ok';
-    if (timeouts > 0) {
+    if (totalEdgeFailures > 0) {
       status = 'critical';
-      bottlenecks.push({
-        nodeId: edge.source,
-        nodeLabel: `${nodeMap.get(edge.source)?.data.config.label} ➜ ${targetNode?.data.config.label}`,
-        type: 'rps',
-        severity: 'critical',
-        value: Math.round(timeouts),
-        limit: 0,
-        message: `${Math.round(timeouts).toLocaleString()} reqs timing out per second on connection`,
-      });
+      if (timeouts > 0) {
+        bottlenecks.push({
+          nodeId: edge.source,
+          nodeLabel: `${nodeMap.get(edge.source)?.data.config.label} ➜ ${targetNode?.data.config.label}`,
+          type: 'rps',
+          severity: 'critical',
+          value: Math.round(timeouts),
+          limit: 0,
+          message: `${Math.round(timeouts).toLocaleString()} reqs timing out per second on connection`,
+        });
+      }
+      if (failFast > 0) {
+        bottlenecks.push({
+          nodeId: edge.source,
+          nodeLabel: `${nodeMap.get(edge.source)?.data.config.label} ➜ ${targetNode?.data.config.label}`,
+          type: 'rps',
+          severity: 'critical',
+          value: Math.round(failFast),
+          limit: 0,
+          message: `${Math.round(failFast).toLocaleString()} reqs failed fast (Circuit Breaker or Crash)`,
+        });
+      }
     } else if (queueSize > 0) {
       status = 'warning';
       bottlenecks.push({
@@ -616,6 +828,7 @@ export function runSimulationTick(
       queueSize: Math.round(queueSize * 10) / 10,
       latencyMs: Math.round((targetLatency + waitTime) * 10) / 10,
       timeoutsPerSecond: Math.round(timeouts * 10) / 10,
+      failuresPerSecond: Math.round(totalEdgeFailures * 10) / 10,
       status,
     };
   }
