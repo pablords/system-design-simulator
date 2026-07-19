@@ -244,7 +244,7 @@ export const ConfigPanel: React.FC = () => {
         <div style={{ fontSize: '9px', color: '#ef4444', marginBottom: '8px', fontFamily: 'monospace' }}>
           [DEBUG] Total nodes: {nodes.length} | Others: {nodes.filter(n => n.id !== node.id).map(n => n.id).join(', ')}
         </div>
-        <div className="btn-connect-container">
+        <div className="btn-connect-container" style={{ border: '2px solid red', minHeight: '50px', background: 'blue', padding: '10px' }}>
           {nodes.filter(n => n.id !== node.id).length === 0 ? (
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px 0' }}>
               Nenhum outro nó no canvas para conectar.
