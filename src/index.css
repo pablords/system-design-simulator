@@ -679,18 +679,21 @@ body { overflow: hidden; height: 100vh; }
     width: 70px;
   }
   
-  .global-load-slider .slider-label {
-    font-size: 10px;
+  /* Ocultar labels de controle do cabeçalho em tablets para liberar espaço */
+  .speed-label,
+  .slider-label,
+  .tick-label {
+    display: none !important;
   }
 
-  /* Painel de Configurações FLUTUANTE sobre o canvas */
+  /* Painel de Configurações FLUTUANTE sobre o canvas com altura explícita para scroll no iOS */
   .config-panel {
     position: absolute;
     right: 12px;
-    top: 64px; /* Abaixo da toolbar */
-    bottom: 120px; /* Acima do painel de métricas */
+    top: 12px; /* Espaço abaixo da toolbar dentro de app-body */
+    bottom: 120px; /* Alinhado exatamente 10px acima da barra de métricas que tem 110px */
     height: auto;
-    max-height: calc(100vh - 200px);
+    max-height: none;
     width: 280px;
     border-radius: var(--radius-lg);
     border: 1.5px solid var(--border);
@@ -698,47 +701,51 @@ body { overflow: hidden; height: 100vh; }
     z-index: 100;
     background: rgba(15, 23, 42, 0.95);
     backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: column;
     transition: transform 200ms ease;
   }
 
-  /* Diminuir levemente as estatísticas do painel inferior */
-  .stat-item {
-    padding: 0 8px;
+  /* Barra de métricas empilhada verticalmente em tablets para não amassar as estatísticas */
+  .metrics-panel {
+    flex-direction: column !important;
+    height: 110px !important;
+    max-height: 110px !important;
+    align-items: stretch !important;
   }
   
   .metrics-stats {
-    padding: 0 8px;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border-dim) !important;
+    height: 50px !important;
+    justify-content: space-around !important;
+    padding: 0 8px !important;
+  }
+
+  .bottleneck-list {
+    height: 60px !important;
+    padding: 8px !important;
+  }
+
+  .bottleneck-ok {
+    height: 60px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
 }
 
-/* --- Media Query: Tablets Pequenos (Retrato - 768px) --- */
+/* --- Media Query: Celulares e Telas Muito Pequenas --- */
 @media (max-width: 768px) {
-  .global-load-slider .slider-label {
-    display: none; /* Oculta a palavra "Global Load" e mantém apenas o slider e a porcentagem */
-  }
-  
-  .speed-selector .speed-label {
-    display: none; /* Oculta a palavra "Speed" e mantém apenas os botões de multiplicador */
-  }
-  
-  /* Garantir que o rodapé de métricas e gargalos não quebre */
-  .metrics-panel {
-    flex-direction: column;
-    max-height: 180px;
-    align-items: stretch;
-    height: auto;
-  }
-  
-  .metrics-stats {
-    border-right: none;
-    border-bottom: 1px solid var(--border-dim);
-    height: 48px;
-    justify-content: space-around;
-  }
-  
-  .bottleneck-list {
-    height: 60px;
-    padding: 8px;
+  /* No mobile, fazemos os painéis flutuantes ocuparem quase a largura inteira */
+  .config-panel {
+    width: calc(100% - 24px) !important;
+    left: 12px !important;
+    right: 12px !important;
+    top: 12px !important;
+    bottom: 120px !important;
+    height: auto !important;
+    max-height: none !important;
   }
 }
 
@@ -746,7 +753,7 @@ body { overflow: hidden; height: 100vh; }
 .calculator-panel {
   position: absolute;
   left: 12px;
-  top: 64px; /* below toolbar */
+  top: 12px; /* 12px padding below toolbar inside app-body */
   bottom: 120px; /* above metrics panel */
   width: 320px;
   background: rgba(15, 23, 42, 0.95);
@@ -842,12 +849,22 @@ body { overflow: hidden; height: 100vh; }
 }
 
 /* Adjust layout on small screens for calculator panel */
+@media (max-width: 1200px) {
+  .calculator-panel {
+    top: 12px;
+    bottom: 120px;
+  }
+}
+
 @media (max-width: 768px) {
   .calculator-panel {
-    width: calc(100% - 24px);
-    right: 12px;
-    bottom: 190px;
-    max-height: calc(100vh - 270px);
+    width: calc(100% - 24px) !important;
+    left: 12px !important;
+    right: 12px !important;
+    top: 12px !important;
+    bottom: 120px !important;
+    height: auto !important;
+    max-height: none !important;
   }
 }
 

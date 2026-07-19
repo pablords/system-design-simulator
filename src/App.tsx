@@ -15,10 +15,11 @@ function App() {
   const [showCalculator, setShowCalculator] = useState(false);
   const { selectedNodeId } = useSimulatorStore();
 
-  // On tablets/mobile, if a node is selected, close the calculator to avoid layout clutter
+  // On tablets/mobile, if a node is selected, close the calculator and palette to avoid layout clutter
   useEffect(() => {
     if (selectedNodeId && window.innerWidth <= 1200) {
       setShowCalculator(false);
+      setIsPaletteOpen(false);
     }
   }, [selectedNodeId]);
 

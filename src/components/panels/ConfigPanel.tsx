@@ -251,23 +251,42 @@ export const ConfigPanel: React.FC = () => {
             </div>
           ) : (
             nodes.filter(n => n.id !== node.id).map(other => {
-              const isConnected = edges.some(e => e.source === node.id && e.target === other.id);
-              const isInbound = edges.some(e => e.source === other.id && e.target === node.id);
               const otherDef = COMPONENT_DEFINITIONS[other.data.componentType];
               
+              // Direções possíveis baseadas nas definições de origem/destino
+              const canConnectAsOutput = !def.isSink && !otherDef.isSource;
+              const canConnectAsInput = !def.isSource && !otherDef.isSink;
+              
+              const isConnectedOutput = edges.some(e => e.source === node.id && e.target === other.id);
+              const isConnectedInput = edges.some(e => e.source === other.id && e.target === node.id);
+              
               return (
-                <div key={other.id} className="btn-connect-row">
-                  <div className="btn-connect-info">
+                <div key={other.id} className="btn-connect-row" style={{ flexDirection: 'column', gap: '8px', alignItems: 'stretch', padding: '8px 10px' }}>
+                  <div className="btn-connect-info" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ fontSize: '12px' }}>{otherDef.icon}</span>
-                    <span style={{ fontWeight: 500 }}>{other.data.config.label || otherDef.label}</span>
-                    {isInbound && <span className="btn-connect-inbound-tag">(Entrada ⬅️)</span>}
+                    <span style={{ fontWeight: 600 }}>{other.data.config.label || otherDef.label}</span>
                   </div>
-                  <button 
-                    className={`btn-connect-action ${isConnected ? 'connected' : ''}`}
-                    onClick={() => isConnected ? disconnectNodes(node.id, other.id) : connectNodes(node.id, other.id)}
-                  >
-                    {isConnected ? '🟢 Ligado' : '⚪ Ligar'}
-                  </button>
+                  
+                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                    {canConnectAsOutput && (
+                      <button 
+                        className={`btn-connect-action ${isConnectedOutput ? 'connected' : ''}`}
+                        style={{ flex: 1, fontSize: '10.5px', padding: '4px 6px' }}
+                        onClick={() => isConnectedOutput ? disconnectNodes(node.id, other.id) : connectNodes(node.id, other.id)}
+                      >
+                        {isConnectedOutput ? '🟢 Saída Ativa' : '⚪ Ligar Saída ➡️'}
+                      </button>
+                    )}
+                    {canConnectAsInput && (
+                      <button 
+                        className={`btn-connect-action ${isConnectedInput ? 'connected' : ''}`}
+                        style={{ flex: 1, fontSize: '10.5px', padding: '4px 6px' }}
+                        onClick={() => isConnectedInput ? disconnectNodes(other.id, node.id) : connectNodes(other.id, node.id)}
+                      >
+                        {isConnectedInput ? '🟢 Entrada Ativa' : '⚪ Ligar Entrada ⬅️'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })

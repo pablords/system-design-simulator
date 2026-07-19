@@ -106,8 +106,8 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
       const newConnection = {
         source: sourceId,
         target: targetId,
-        sourceHandle: null,
-        targetHandle: null,
+        sourceHandle: 'source',
+        targetHandle: 'target',
       };
       return {
         edges: addEdge({ ...newConnection, type: 'connectionEdge', animated: true }, state.edges),

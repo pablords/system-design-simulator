@@ -68,7 +68,7 @@ export const ComponentNode = memo(({ id, data: rawData, selected }: NodeProps) =
       } as React.CSSProperties}
     >
       {!def.isSource && (
-        <Handle type="target" position={Position.Left} className="node-handle node-handle-in" />
+        <Handle type="target" position={Position.Left} id="target" className="node-handle node-handle-in" />
       )}
 
       <div className="node-header" style={{ borderColor: def.color }}>
@@ -141,7 +141,7 @@ export const ComponentNode = memo(({ id, data: rawData, selected }: NodeProps) =
       )}
 
       {!def.isSink && (
-        <Handle type="source" position={Position.Right} className="node-handle node-handle-out" />
+        <Handle type="source" position={Position.Right} id="source" className="node-handle node-handle-out" />
       )}
     </div>
   );
