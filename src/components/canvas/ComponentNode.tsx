@@ -128,7 +128,7 @@ export const ComponentNode = memo(({ id, data: rawData, selected }: NodeProps) =
         )}
       </div>
 
-      {config.replicas > 1 && (
+      {config.replicas !== undefined && config.replicas > 1 && (
         <div className="node-replicas-badge" style={{ borderColor: def.color }}>
           ×{config.replicas}
         </div>

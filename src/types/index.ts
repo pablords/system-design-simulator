@@ -52,13 +52,13 @@ export type ComponentType =
 export type NodeStatus = 'idle' | 'ok' | 'warning' | 'critical';
 
 export interface ComponentConfig {
-  replicas: number;
-  maxRps: number;
-  cpuCores: number;
-  ramGb: number;
-  storageGb: number;
-  cacheHitRate?: number; // 0-1, only for cache nodes
   label: string;
+  replicas?: number;
+  maxRps?: number;
+  cpuCores?: number;
+  ramGb?: number;
+  storageGb?: number;
+  cacheHitRate?: number; // 0-1, only for cache nodes
   connectionPool?: number; // max concurrent connections (e.g. for database, cache)
   timeoutMs?: number;      // source request timeout limit
   rateLimiterEnabled?: boolean; // semaphore / rate limiter active

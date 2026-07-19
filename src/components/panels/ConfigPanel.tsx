@@ -84,37 +84,54 @@ export const ConfigPanel: React.FC = () => {
           />
         </div>
 
-        <div className="config-section-title">
-          <Layers size={14} /> Capacity
-        </div>
-
-        <Slider label="Replicas" value={config.replicas} min={1} max={20} step={1} unit="×" onChange={(v) => update('replicas', v)} />
-        <Slider label="Max RPS / replica" value={config.maxRps} min={100} max={100000} step={100} unit=" rps" onChange={(v) => update('maxRps', v)} />
-        {config.connectionPool !== undefined && (
-          <Slider label="Connection Pool" value={config.connectionPool} min={5} max={5000} step={5} unit=" conns" onChange={(v) => update('connectionPool', v)} />
+        {/* Capacity Section (Conditional) */}
+        {(config.replicas !== undefined || config.maxRps !== undefined || config.connectionPool !== undefined || config.timeoutMs !== undefined) && (
+          <>
+            <div className="config-section-title">
+              <Layers size={14} /> Capacity
+            </div>
+            {config.replicas !== undefined && (
+              <Slider label="Replicas" value={config.replicas} min={1} max={20} step={1} unit="×" onChange={(v) => update('replicas', v)} />
+            )}
+            {config.maxRps !== undefined && (
+              <Slider label="Max RPS / replica" value={config.maxRps} min={100} max={100000} step={100} unit=" rps" onChange={(v) => update('maxRps', v)} />
+            )}
+            {config.connectionPool !== undefined && (
+              <Slider label="Connection Pool" value={config.connectionPool} min={5} max={5000} step={5} unit=" conns" onChange={(v) => update('connectionPool', v)} />
+            )}
+            {config.timeoutMs !== undefined && (
+              <Slider label="Timeout" value={config.timeoutMs} min={50} max={10000} step={50} unit=" ms" onChange={(v) => update('timeoutMs', v)} />
+            )}
+            {!def.isSource && !def.isSink && config.maxRps !== undefined && (
+              <div className="config-field" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, padding: '4px 0' }}>
+                <span className="config-label">Semáforo (Rate Limiter)</span>
+                <input
+                  type="checkbox"
+                  checked={!!config.rateLimiterEnabled}
+                  onChange={(e) => update('rateLimiterEnabled', e.target.checked)}
+                  style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--accent)' }}
+                />
+              </div>
+            )}
+          </>
         )}
-        {config.timeoutMs !== undefined && (
-          <Slider label="Timeout" value={config.timeoutMs} min={50} max={10000} step={50} unit=" ms" onChange={(v) => update('timeoutMs', v)} />
-        )}
-        {!def.isSource && !def.isSink && (
-          <div className="config-field" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, padding: '4px 0' }}>
-            <span className="config-label">Semáforo (Rate Limiter)</span>
-            <input
-              type="checkbox"
-              checked={!!config.rateLimiterEnabled}
-              onChange={(e) => update('rateLimiterEnabled', e.target.checked)}
-              style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--accent)' }}
-            />
-          </div>
+
+        {/* Resources Section (Conditional) */}
+        {(config.cpuCores !== undefined || config.ramGb !== undefined) && (
+          <>
+            <div className="config-section-title">
+              <Server size={14} /> Resources
+            </div>
+            {config.cpuCores !== undefined && (
+              <Slider label="CPU Cores" value={config.cpuCores} min={1} max={64} step={1} unit=" cores" onChange={(v) => update('cpuCores', v)} />
+            )}
+            {config.ramGb !== undefined && (
+              <Slider label="RAM" value={config.ramGb} min={1} max={256} step={1} unit=" GB" onChange={(v) => update('ramGb', v)} />
+            )}
+          </>
         )}
 
-        <div className="config-section-title">
-          <Server size={14} /> Resources
-        </div>
-        <Slider label="CPU Cores" value={config.cpuCores} min={1} max={64} step={1} unit=" cores" onChange={(v) => update('cpuCores', v)} />
-        <Slider label="RAM" value={config.ramGb} min={1} max={256} step={1} unit=" GB" onChange={(v) => update('ramGb', v)} />
-
-        {def.accumulatesStorage && (
+        {def.accumulatesStorage && config.storageGb !== undefined && (
           <Slider label="Storage" value={config.storageGb} min={10} max={50000} step={10} unit=" GB" onChange={(v) => update('storageGb', v)} />
         )}
 
@@ -147,22 +164,26 @@ export const ConfigPanel: React.FC = () => {
                 <span className="metric-card-label">Inbound RPS</span>
                 <span className="metric-card-value">{metrics.inboundRps.toLocaleString()}</span>
               </div>
-              <div className="metric-card">
-                <Cpu size={14} className="metric-card-icon" />
-                <span className="metric-card-label">CPU</span>
-                <span className="metric-card-value">{metrics.cpuPct}%</span>
-              </div>
-              <div className="metric-card">
-                <Server size={14} className="metric-card-icon" />
-                <span className="metric-card-label">RAM</span>
-                <span className="metric-card-value">{metrics.ramPct}%</span>
-              </div>
+              {config.cpuCores !== undefined && (
+                <div className="metric-card">
+                  <Cpu size={14} className="metric-card-icon" />
+                  <span className="metric-card-label">CPU</span>
+                  <span className="metric-card-value">{metrics.cpuPct}%</span>
+                </div>
+              )}
+              {config.ramGb !== undefined && (
+                <div className="metric-card">
+                  <Server size={14} className="metric-card-icon" />
+                  <span className="metric-card-label">RAM</span>
+                  <span className="metric-card-value">{metrics.ramPct}%</span>
+                </div>
+              )}
               <div className="metric-card">
                 <Clock size={14} className="metric-card-icon" />
                 <span className="metric-card-label">Latency</span>
                 <span className="metric-card-value">{metrics.latencyMs}ms</span>
               </div>
-              {def.accumulatesStorage && (
+              {def.accumulatesStorage && config.storageGb !== undefined && (
                 <div className="metric-card">
                   <HardDrive size={14} className="metric-card-icon" />
                   <span className="metric-card-label">Storage</span>
@@ -178,7 +199,7 @@ export const ConfigPanel: React.FC = () => {
               )}
             </div>
 
-            {historyData.length > 2 && (
+            {historyData.length > 2 && (config.cpuCores !== undefined || config.ramGb !== undefined) && (
               <div className="chart-container">
                 <div className="chart-title">CPU & RAM History</div>
                 <ResponsiveContainer width="100%" height={80}>
@@ -188,35 +209,51 @@ export const ConfigPanel: React.FC = () => {
                       contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 11 }}
                       labelFormatter={(l) => `Tick ${l}`}
                     />
-                    <Line type="monotone" dataKey="CPU" stroke="#f59e0b" dot={false} strokeWidth={2} />
-                    <Line type="monotone" dataKey="RAM" stroke="#6366f1" dot={false} strokeWidth={2} />
+                    {config.cpuCores !== undefined && (
+                      <Line type="monotone" dataKey="CPU" stroke="#f59e0b" dot={false} strokeWidth={2} />
+                    )}
+                    {config.ramGb !== undefined && (
+                      <Line type="monotone" dataKey="RAM" stroke="#6366f1" dot={false} strokeWidth={2} />
+                    )}
                   </LineChart>
                 </ResponsiveContainer>
                 <div className="chart-legend">
-                  <span className="legend-item" style={{ color: '#f59e0b' }}>● CPU</span>
-                  <span className="legend-item" style={{ color: '#6366f1' }}>● RAM</span>
+                  {config.cpuCores !== undefined && (
+                    <span className="legend-item" style={{ color: '#f59e0b' }}>● CPU</span>
+                  )}
+                  {config.ramGb !== undefined && (
+                    <span className="legend-item" style={{ color: '#6366f1' }}>● RAM</span>
+                  )}
                 </div>
               </div>
             )}
           </>
         )}
 
-        <div className="config-summary">
-          <div className="config-summary-row">
-            <span>Total Capacity</span>
-            <strong>{(config.maxRps * config.replicas).toLocaleString()} RPS</strong>
+        {((config.maxRps !== undefined && config.replicas !== undefined) ||
+          (config.ramGb !== undefined && config.replicas !== undefined) ||
+          (def.accumulatesStorage && config.storageGb !== undefined && config.replicas !== undefined)) && (
+          <div className="config-summary">
+            {config.maxRps !== undefined && config.replicas !== undefined && (
+              <div className="config-summary-row">
+                <span>Total Capacity</span>
+                <strong>{(config.maxRps * config.replicas).toLocaleString()} RPS</strong>
+              </div>
+            )}
+            {config.ramGb !== undefined && config.replicas !== undefined && (
+              <div className="config-summary-row">
+                <span>Total RAM</span>
+                <strong>{config.ramGb * config.replicas} GB</strong>
+              </div>
+            )}
+            {def.accumulatesStorage && config.storageGb !== undefined && config.replicas !== undefined && (
+              <div className="config-summary-row">
+                <span>Total Storage</span>
+                <strong>{config.storageGb >= 1000 ? `${(config.storageGb / 1000).toFixed(1)} TB` : `${config.storageGb} GB`}</strong>
+              </div>
+            )}
           </div>
-          <div className="config-summary-row">
-            <span>Total RAM</span>
-            <strong>{config.ramGb * config.replicas} GB</strong>
-          </div>
-          {def.accumulatesStorage && (
-            <div className="config-summary-row">
-              <span>Total Storage</span>
-              <strong>{config.storageGb >= 1000 ? `${(config.storageGb / 1000).toFixed(1)} TB` : `${config.storageGb} GB`}</strong>
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </aside>
   );

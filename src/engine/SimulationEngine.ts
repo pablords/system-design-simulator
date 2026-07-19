@@ -68,7 +68,7 @@ export function runSimulationTick(
   for (const node of nodes) {
     const def = COMPONENT_DEFINITIONS[node.data.componentType];
     if (def.isSource) {
-      inboundRpsMap[node.id] = node.data.config.maxRps * node.data.config.replicas * (globalTrafficScale / 100);
+      inboundRpsMap[node.id] = (node.data.config.maxRps ?? 0) * (node.data.config.replicas ?? 1) * (globalTrafficScale / 100);
     }
   }
 
@@ -85,7 +85,7 @@ export function runSimulationTick(
 
     const def = COMPONENT_DEFINITIONS[currentNode.data.componentType];
     const inbound = inboundRpsMap[currentId] ?? 0;
-    const effectiveMaxRps = currentNode.data.config.maxRps * currentNode.data.config.replicas;
+    const effectiveMaxRps = (currentNode.data.config.maxRps ?? 0) * (currentNode.data.config.replicas ?? 1);
 
     let outboundRps: number;
     if (crashedNodesSet.has(currentId)) {
@@ -134,7 +134,7 @@ export function runSimulationTick(
     const cfg = node.data.config;
     const def = COMPONENT_DEFINITIONS[node.data.componentType];
     const inbound = inboundRpsMap[node.id] ?? 0;
-    const effectiveMaxRps = cfg.maxRps * cfg.replicas;
+    const effectiveMaxRps = (cfg.maxRps ?? 0) * (cfg.replicas ?? 1);
     const utilization = effectiveMaxRps > 0 ? clamp(inbound / effectiveMaxRps, 0, 2) : 0;
     const overloadFactor = utilization > 1 ? (utilization - 1) * 5 : 0;
     const latencyMs = def.baseLatencyMs * (1 + overloadFactor * 3);
@@ -152,7 +152,7 @@ export function runSimulationTick(
 
     // Connection pool logic
     if (cfg.connectionPool !== undefined) {
-      const poolLimit = cfg.connectionPool * cfg.replicas;
+      const poolLimit = cfg.connectionPool * (cfg.replicas ?? 1);
       let totalRequestedConnections = 0;
       const requestedMap: Record<string, number> = {};
 
@@ -199,7 +199,7 @@ export function runSimulationTick(
   for (const node of nodes) {
     const def = COMPONENT_DEFINITIONS[node.data.componentType];
     if (def.isSource) {
-      finalInboundRpsMap[node.id] = node.data.config.maxRps * node.data.config.replicas * (globalTrafficScale / 100);
+      finalInboundRpsMap[node.id] = (node.data.config.maxRps ?? 0) * (node.data.config.replicas ?? 1) * (globalTrafficScale / 100);
     } else {
       finalInboundRpsMap[node.id] = 0;
     }
@@ -273,7 +273,7 @@ export function runSimulationTick(
     }
 
     const inbound = finalInboundRpsMap[node.id] ?? 0;
-    const effectiveMaxRps = cfg.maxRps * cfg.replicas;
+    const effectiveMaxRps = (cfg.maxRps ?? 0) * (cfg.replicas ?? 1);
 
     const utilization = effectiveMaxRps > 0 ? clamp(inbound / effectiveMaxRps, 0, 2) : 0;
     const overloadFactor = utilization > 1 ? (utilization - 1) * 5 : 0;
@@ -325,7 +325,7 @@ export function runSimulationTick(
     // Storage growth
     const prevStoragePct = prevMetrics?.storagePct ?? 0;
     let storagePct = prevStoragePct;
-    if (def.accumulatesStorage && cfg.storageGb > 0) {
+    if (def.accumulatesStorage && cfg.storageGb && cfg.storageGb > 0) {
       const storageGrowthPerTick = (inbound * 0.0001) / cfg.storageGb;
       storagePct = clamp(prevStoragePct + storageGrowthPerTick, 0, 100);
     }
