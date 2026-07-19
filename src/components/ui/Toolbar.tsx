@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Pause, RotateCcw, Save, FolderOpen, Trash2, Zap, ChevronDown, Menu } from 'lucide-react';
+import { Play, Pause, RotateCcw, Save, FolderOpen, Trash2, Zap, ChevronDown, Menu, Calculator } from 'lucide-react';
 import { useSimulatorStore } from '../../store/simulatorStore';
 
 interface ToolbarProps {
@@ -7,9 +7,11 @@ interface ToolbarProps {
   onLoad: () => void;
   isPaletteOpen: boolean;
   onTogglePalette: () => void;
+  showCalculator: boolean;
+  onToggleCalculator: () => void;
 }
 
-export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen, onTogglePalette }) => {
+export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen, onTogglePalette, showCalculator, onToggleCalculator }) => {
   const { simulation, startSimulation, pauseSimulation, resetSimulation, setSimulationSpeed, clearCanvas, loadPreset, setGlobalTrafficScale } = useSimulatorStore();
   const [showPresets, setShowPresets] = useState(false);
   const [tempGlobalLoad, setTempGlobalLoad] = useState(String(simulation.globalTrafficScale ?? 100));
@@ -140,6 +142,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen,
       </div>
 
       <div className="toolbar-right">
+        {/* Estimativas */}
+        <button className={`btn btn-ghost ${showCalculator ? 'active' : ''}`} onClick={onToggleCalculator} title="Calculadora de Capacidades (Conta de Padaria)">
+          <Calculator size={16} />
+          <span className="btn-text">Estimativas</span>
+        </button>
+
         {/* Presets */}
         <div className="relative">
           <button className="btn btn-ghost" onClick={() => setShowPresets(!showPresets)}>

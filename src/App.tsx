@@ -6,11 +6,13 @@ import { ConfigPanel } from './components/panels/ConfigPanel';
 import { MetricsPanel } from './components/panels/MetricsPanel';
 import { SaveDialog, LoadDialog } from './components/panels/ScenarioDialogs';
 import { useSimulatorStore } from './store/simulatorStore';
+import { CapacityCalculator } from './components/panels/CapacityCalculator';
 
 function App() {
   const [showSave, setShowSave] = useState(false);
   const [showLoad, setShowLoad] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(true);
+  const [showCalculator, setShowCalculator] = useState(false);
   const { selectedNodeId } = useSimulatorStore();
 
   return (
@@ -20,9 +22,12 @@ function App() {
         onLoad={() => setShowLoad(true)}
         isPaletteOpen={isPaletteOpen}
         onTogglePalette={() => setIsPaletteOpen(!isPaletteOpen)}
+        showCalculator={showCalculator}
+        onToggleCalculator={() => setShowCalculator(!showCalculator)}
       />
 
       <div className="app-body">
+        {showCalculator && <CapacityCalculator onClose={() => setShowCalculator(false)} />}
         <ComponentPalette isOpen={isPaletteOpen} onClose={() => setIsPaletteOpen(false)} />
 
         <main className="canvas-area">
