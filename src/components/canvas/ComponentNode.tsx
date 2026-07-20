@@ -27,10 +27,10 @@ interface MiniSparklineProps {
 }
 
 const MiniSparkline: React.FC<MiniSparklineProps> = ({ data, color }) => {
-  if (data.length < 2) return <div style={{ height: 20 }} />;
+  if (data.length < 2) return <div style={{ height: 14 }} />;
   const max = Math.max(...data, 1);
-  const w = 80;
-  const h = 20;
+  const w = 60;
+  const h = 14;
   const points = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - (v / max) * h}`).join(' ');
   return (
     <svg width={w} height={h} style={{ display: 'block' }}>
@@ -72,7 +72,7 @@ export const ComponentNode = memo(({ id, data: rawData, selected }: NodeProps) =
       )}
 
       <div className="node-header" style={{ borderColor: def.color }}>
-        <ServiceIcon type={data.componentType} size={18} style={{ marginRight: 6 }} />
+        <ServiceIcon type={data.componentType} size={15} style={{ marginRight: 6 }} />
         <span className="node-label">{config.label}</span>
         <button className="node-delete-btn" onClick={handleDelete} title="Remove">
           <Trash2 size={12} />

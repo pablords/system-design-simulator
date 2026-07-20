@@ -99,12 +99,22 @@ export const ConfigPanel: React.FC = () => {
 
   React.useEffect(() => {
     setActiveTab('dashboard');
-    if (node && incomingNodes.length > 0) {
-      setSelectedTraceSourceId(incomingNodes[0]!.id);
-    } else {
-      setSelectedTraceSourceId('');
+    if (selectedNodeId) {
+      const state = useSimulatorStore.getState();
+      const currNode = state.nodes.find(n => n.id === selectedNodeId);
+      if (currNode) {
+        const incoming = state.edges
+          .filter(e => e.target === selectedNodeId)
+          .map(e => state.nodes.find(n => n.id === e.source))
+          .filter((n): n is typeof n & {} => !!n);
+        if (incoming.length > 0) {
+          setSelectedTraceSourceId(incoming[0].id);
+          return;
+        }
+      }
     }
-  }, [selectedNodeId, incomingNodes, node]);
+    setSelectedTraceSourceId('');
+  }, [selectedNodeId]);
 
   const update = (key: string, value: number | string | boolean) => {
     if (node) updateNodeConfig(node.id, { [key]: value });
@@ -1183,7 +1193,7 @@ export const ConfigPanel: React.FC = () => {
                           }}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                            <span style={{ fontSize: '16px' }}>{otherDef.icon}</span>
+                            <ServiceIcon type={other.data.componentType} size={18} />
                             <div style={{ minWidth: 0 }}>
                               <div style={{ fontSize: '12px', fontWeight: 600, color: '#fff', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                                 {other.data.config.label}
