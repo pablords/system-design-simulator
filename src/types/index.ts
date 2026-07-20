@@ -69,6 +69,25 @@ export interface ComponentConfig {
   cbFailureThreshold?: number;     // failure rate threshold (0 to 1)
   cbSleepWindowTicks?: number;     // ticks in OPEN before going HALF-OPEN
   clientLatencyMs?: number;      // Latency of last-mile/client ping
+
+  // Load Balancer
+  lbAlgorithm?: 'round-robin' | 'least-connections';
+
+  // Auto-scaling
+  autoscalingEnabled?: boolean;
+  maxReplicas?: number;
+
+  // Database
+  dbReplication?: 'standalone' | 'master-replica';
+  readWriteSplittingEnabled?: boolean;
+
+  // Cache
+  evictionPolicy?: 'lru' | 'lfu' | 'fifo' | 'none';
+  memoryLimitMb?: number;
+
+  // Message Queue & Kafka
+  deliveryGuarantee?: 'at-least-once' | 'at-most-once' | 'exactly-once';
+  partitionCount?: number;
 }
 
 export interface EdgeMetrics {
@@ -117,6 +136,10 @@ export interface NodeMetrics {
   p95?: number;
   p99?: number;
   logs?: string[];
+
+  // Role-specific metrics
+  activeReplicas?: number;
+  consumerLag?: number;
 }
 
 export interface MetricSnapshot {

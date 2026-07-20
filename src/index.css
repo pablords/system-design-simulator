@@ -1005,3 +1005,102 @@ body { overflow: hidden; height: 100vh; }
   pointer-events: auto; /* enable tooltip hover */
 }
 
+/* ─── Config Modal Styling (Redesign) ─── */
+.config-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(4, 7, 17, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.config-modal-content {
+  width: 680px;
+  max-width: 100%;
+  max-height: 88vh;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: fadeInModal 0.2s ease-out;
+}
+@keyframes fadeInModal {
+  from { transform: scale(0.96); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.config-modal-tabs {
+  display: flex;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-dim);
+  padding: 0 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.config-modal-tabs::-webkit-scrollbar {
+  display: none;
+}
+.config-modal-tab-btn {
+  padding: 12px 18px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 13px;
+  transition: all 0.2s ease;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.config-modal-tab-btn:hover {
+  color: var(--text-primary);
+}
+.config-modal-tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.config-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.config-modal-body::-webkit-scrollbar {
+  width: 4px;
+}
+.config-modal-body::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.config-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border-dim);
+  flex-shrink: 0;
+}
+
+/* Custom inputs inside grid */
+.config-grid-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 600px) {
+  .config-grid-layout {
+    grid-template-columns: 1fr;
+  }
+}

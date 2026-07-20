@@ -153,7 +153,22 @@ export function runSimulationTick(
     } else {
       // CDN / Cache Hit Rate only affects Read operations (Write Bypass)
       if (currentNode.data.config.cacheHitRate !== undefined) {
-        outboundReadRps = inboundRead * (1 - currentNode.data.config.cacheHitRate);
+        let hitRate = currentNode.data.config.cacheHitRate;
+        if (currentNode.data.componentType === 'cache') {
+          const memoryLimit = currentNode.data.config.memoryLimitMb ?? 512;
+          const policy = currentNode.data.config.evictionPolicy ?? 'lru';
+          
+          if (inboundWrite > 0 && memoryLimit > 0) {
+            const loadRatio = inboundWrite / memoryLimit;
+            let penalty = 0;
+            if (policy === 'fifo') penalty = clamp(loadRatio * 2, 0, 0.6);
+            else if (policy === 'lru') penalty = clamp(Math.log10(loadRatio + 1) * 0.5, 0, 0.3);
+            else if (policy === 'lfu') penalty = clamp(Math.log10(loadRatio + 1) * 0.7, 0, 0.4);
+            else if (policy === 'none') penalty = clamp(loadRatio * 5, 0, 0.95);
+            hitRate = clamp(hitRate - penalty, 0.05, 1.0);
+          }
+        }
+        outboundReadRps = inboundRead * (1 - hitRate);
         outboundWriteRps = inboundWrite; // Bypass cache for write operations
       } else {
         outboundReadRps = inboundRead;
@@ -187,8 +202,33 @@ export function runSimulationTick(
       const readEdges = businessEdges.filter(e => !e.data?.trafficType || e.data.trafficType === 'all' || e.data.trafficType === 'read');
       const writeEdges = businessEdges.filter(e => !e.data?.trafficType || e.data.trafficType === 'all' || e.data.trafficType === 'write');
 
-      const readRpsPerEdge = readEdges.length > 0 ? outboundReadRps / readEdges.length : 0;
-      const writeRpsPerEdge = writeEdges.length > 0 ? outboundWriteRps / writeEdges.length : 0;
+      const isLeastConn = currentNode.data.componentType === 'load-balancer' && currentNode.data.config.lbAlgorithm === 'least-connections';
+
+      let readRpsPerEdge = 0;
+      let writeRpsPerEdge = 0;
+
+      let totalReadWeight = 0;
+      const readWeightsMap: Record<string, number> = {};
+      let totalWriteWeight = 0;
+      const writeWeightsMap: Record<string, number> = {};
+
+      if (isLeastConn) {
+        for (const edge of readEdges) {
+          const tgtCpu = nodeMap.get(edge.target)?.data.metrics?.cpuPct ?? 15;
+          const weight = 1 / (tgtCpu + 1);
+          readWeightsMap[edge.id] = weight;
+          totalReadWeight += weight;
+        }
+        for (const edge of writeEdges) {
+          const tgtCpu = nodeMap.get(edge.target)?.data.metrics?.cpuPct ?? 15;
+          const weight = 1 / (tgtCpu + 1);
+          writeWeightsMap[edge.id] = weight;
+          totalWriteWeight += weight;
+        }
+      } else {
+        readRpsPerEdge = readEdges.length > 0 ? outboundReadRps / readEdges.length : 0;
+        writeRpsPerEdge = writeEdges.length > 0 ? outboundWriteRps / writeEdges.length : 0;
+      }
 
       // 1. Process business edges
       for (const edge of businessEdges) {
@@ -198,8 +238,20 @@ export function runSimulationTick(
         const isReadAllowed = !edge.data?.trafficType || edge.data.trafficType === 'all' || edge.data.trafficType === 'read';
         const isWriteAllowed = !edge.data?.trafficType || edge.data.trafficType === 'all' || edge.data.trafficType === 'write';
 
-        if (isReadAllowed) edgeRead = readRpsPerEdge;
-        if (isWriteAllowed) edgeWrite = writeRpsPerEdge;
+        if (isReadAllowed) {
+          if (isLeastConn) {
+            edgeRead = totalReadWeight > 0 ? outboundReadRps * (readWeightsMap[edge.id] / totalReadWeight) : (outboundReadRps / (readEdges.length || 1));
+          } else {
+            edgeRead = readRpsPerEdge;
+          }
+        }
+        if (isWriteAllowed) {
+          if (isLeastConn) {
+            edgeWrite = totalWriteWeight > 0 ? outboundWriteRps * (writeWeightsMap[edge.id] / totalWriteWeight) : (outboundWriteRps / (writeEdges.length || 1));
+          } else {
+            edgeWrite = writeRpsPerEdge;
+          }
+        }
 
         const edgeTotal = edgeRead + edgeWrite;
         edgeRpsMap[edge.id] = edgeTotal;
@@ -470,9 +522,68 @@ export function runSimulationTick(
     const inbound = finalInboundRpsMap[node.id] ?? 0;
     const inboundRead = finalInboundReadRpsMap[node.id] ?? 0;
     const inboundWrite = finalInboundWriteRpsMap[node.id] ?? 0;
-    const effectiveMaxRps = (cfg.maxRps ?? 0) * (cfg.replicas ?? 1);
 
-    const utilization = effectiveMaxRps > 0 ? clamp(inbound / effectiveMaxRps, 0, 2) : 0;
+    // Partition bottleneck check for Workers connected from queues/Kafka
+    let partitionLimit = Infinity;
+    let bottleneckQueueLabel = '';
+    if (node.data.componentType === 'worker') {
+      const inboundEdgesList = inboundEdges[node.id] ?? [];
+      for (const edge of inboundEdgesList) {
+        const srcNode = nodeMap.get(edge.source);
+        if (srcNode && (srcNode.data.componentType === 'message-queue' || srcNode.data.componentType === 'kafka')) {
+          const partitions = srcNode.data.config.partitionCount ?? 4;
+          if (partitions < partitionLimit) {
+            partitionLimit = partitions;
+            bottleneckQueueLabel = srcNode.data.config.label;
+          }
+        }
+      }
+    }
+
+    // Auto-scaling active replicas calculation
+    const isComputeNode = node.data.componentType === 'app-server' || node.data.componentType === 'worker';
+    let activeReplicas = prevMetrics?.activeReplicas ?? cfg.replicas ?? 1;
+
+    if (cfg.autoscalingEnabled && isComputeNode) {
+      const maxRep = cfg.maxReplicas ?? 10;
+      const minRep = cfg.replicas ?? 1;
+      const prevUtil = prevMetrics ? (prevMetrics.inboundRps / ((cfg.maxRps ?? 500) * activeReplicas)) : 0;
+
+      if (prevUtil > 0.8 && activeReplicas < maxRep) {
+        activeReplicas += 1;
+      } else if (prevUtil < 0.3 && activeReplicas > minRep) {
+        activeReplicas -= 1;
+      }
+    } else {
+      activeReplicas = cfg.replicas ?? 1;
+    }
+
+    // Throttle worker active consumption scale if partitionCount limit is smaller than active replicas
+    let scaledReplicas = activeReplicas;
+    if (partitionLimit < activeReplicas) {
+      scaledReplicas = partitionLimit;
+      
+      bottlenecks.push({
+        nodeId: node.id,
+        nodeLabel: cfg.label,
+        type: 'cpu',
+        severity: 'warning',
+        value: activeReplicas,
+        limit: partitionLimit,
+        message: `Paralelismo limitado: ${activeReplicas} Workers ativos, mas a fila "${bottleneckQueueLabel}" possui apenas ${partitionLimit} partições. Os outros ${activeReplicas - partitionLimit} Workers estão ociosos!`,
+      });
+    }
+
+    const effectiveMaxRps = (cfg.maxRps ?? 0) * scaledReplicas;
+
+    // Rate Limiting (Semaphore) - blocks excess traffic from overwhelming compute
+    const rateLimitFailures = (cfg.rateLimiterEnabled && inbound > effectiveMaxRps)
+      ? Math.max(0, inbound - effectiveMaxRps)
+      : 0;
+
+    const effectiveInbound = cfg.rateLimiterEnabled ? Math.min(inbound, effectiveMaxRps) : inbound;
+
+    const utilization = effectiveMaxRps > 0 ? clamp(effectiveInbound / effectiveMaxRps, 0, 2) : 0;
     const overloadFactor = utilization > 1 ? (utilization - 1) * 5 : 0;
 
     let cpuPct = clamp(def.baseCpuPct * utilization + overloadFactor * 10, 0, 100);
@@ -487,11 +598,11 @@ export function runSimulationTick(
     if (!def.isSource && !def.isSink) {
       if (utilization > 1) {
         // Under overload: backlog grows each tick by the unserviced requests
-        const queueChange = inbound - effectiveMaxRps;
+        const queueChange = effectiveInbound - effectiveMaxRps;
         queueDepth = prevQueue + queueChange;
       } else {
         // Capacity freed: drain backlog at excessCapacity per tick
-        const excessCapacity = effectiveMaxRps - inbound;
+        const excessCapacity = effectiveMaxRps - effectiveInbound;
         queueDepth = Math.max(0, prevQueue - excessCapacity);
       }
 
@@ -534,20 +645,26 @@ export function runSimulationTick(
       outboundWrite = 0;
     } else {
       if (cfg.cacheHitRate !== undefined) {
-        outboundRead = inboundRead * (1 - cfg.cacheHitRate);
+        let hitRate = cfg.cacheHitRate;
+        if (node.data.componentType === 'cache') {
+          const memoryLimit = cfg.memoryLimitMb ?? 512;
+          const policy = cfg.evictionPolicy ?? 'lru';
+          
+          if (inboundWrite > 0 && memoryLimit > 0) {
+            const loadRatio = inboundWrite / memoryLimit;
+            let penalty = 0;
+            if (policy === 'fifo') penalty = clamp(loadRatio * 2, 0, 0.6);
+            else if (policy === 'lru') penalty = clamp(Math.log10(loadRatio + 1) * 0.5, 0, 0.3);
+            else if (policy === 'lfu') penalty = clamp(Math.log10(loadRatio + 1) * 0.7, 0, 0.4);
+            else if (policy === 'none') penalty = clamp(loadRatio * 5, 0, 0.95);
+            hitRate = clamp(hitRate - penalty, 0.05, 1.0);
+          }
+        }
+        outboundRead = inboundRead * (1 - hitRate);
         outboundWrite = inboundWrite; // Write Bypass
       } else {
         outboundRead = inboundRead;
         outboundWrite = inboundWrite;
-      }
-
-      if (cfg.rateLimiterEnabled) {
-        const totalOutRaw = outboundRead + outboundWrite;
-        if (totalOutRaw > effectiveMaxRps && totalOutRaw > 0) {
-          const scale = effectiveMaxRps / totalOutRaw;
-          outboundRead *= scale;
-          outboundWrite *= scale;
-        }
       }
     }
 
@@ -559,13 +676,44 @@ export function runSimulationTick(
     const overloadFailureRate = (utilization > 1 && !cfg.rateLimiterEnabled) ? clamp((utilization - 1) * 0.5, 0, 0.8) : 0;
     const overloadErrors = inbound * overloadFailureRate;
 
-    const localFailures = Math.min(inbound, injectedErrors + overloadErrors + queueTimeouts);
-    const localSuccess = Math.max(0, inbound - localFailures);
+    // Delivery guarantees failures/losses under load
+    let deliveryErrors = 0;
+    if (node.data.componentType === 'message-queue' || node.data.componentType === 'kafka') {
+      const guarantee = cfg.deliveryGuarantee ?? 'at-least-once';
+      if (guarantee === 'at-most-once' && inbound > 1000) {
+        deliveryErrors = inbound * 0.01; // 1% data loss under load
+      }
+    }
+
+    const isDbReplicated = cfg.dbReplication === 'master-replica' && cfg.readWriteSplittingEnabled;
+
+    let localFailures = 0;
+    let localSuccess = 0;
+
+    if (crashedNodesSet.has(node.id)) {
+      if (isDbReplicated) {
+        // SQL Master-replica split failover: writes fail, reads succeed
+        localFailures = inboundWrite;
+        localSuccess = inboundRead;
+        outboundRead = inboundRead;
+        outboundWrite = 0;
+      } else {
+        localFailures = inbound;
+        localSuccess = 0;
+        outboundRead = 0;
+        outboundWrite = 0;
+      }
+    } else {
+      localFailures = Math.min(inbound, injectedErrors + overloadErrors + queueTimeouts + rateLimitFailures + deliveryErrors);
+      localSuccess = Math.max(0, inbound - localFailures);
+    }
 
     const processSuccessRatio = inbound > 0 ? localSuccess / inbound : 1.0;
 
-    outboundRead *= processSuccessRatio;
-    outboundWrite *= processSuccessRatio;
+    if (!crashedNodesSet.has(node.id) || !isDbReplicated) {
+      outboundRead *= processSuccessRatio;
+      outboundWrite *= processSuccessRatio;
+    }
     let outboundRps = outboundRead + outboundWrite;
     if (outboundTargets.length === 0) outboundRps = 0;
 
@@ -665,6 +813,7 @@ export function runSimulationTick(
       failedRps: Math.round(localFailures),
       cbState: cbStateMap[node.id],
       cbOpenTimer: cbOpenTimerMap[node.id],
+      activeReplicas,
     };
 
     if (def.isSource) totalRps += inbound;
@@ -717,9 +866,13 @@ export function runSimulationTick(
     }
   }
 
-  // Step 2.5: Observability log generation
+  // Step 2.5: Observability metrics (Logs & Consumer Lag)
   for (const node of nodes) {
-    if (node.data.componentType === 'logs') {
+    const compType = node.data.componentType;
+    const cfg = node.data.config;
+    const prevMetrics = node.data.metrics;
+
+    if (compType === 'logs') {
       const targetInEdges = inboundEdges[node.id] ?? [];
       const connectedInwardNodes = targetInEdges
         .map((edge) => nodeMap.get(edge.source))
@@ -751,12 +904,37 @@ export function runSimulationTick(
         newLogs.push(`[${timestamp}] [WARN] Nenhum nó conectado à entrada para monitoramento de logs.`);
       }
 
-      const prevMetrics = node.data.metrics;
       const prevLogs = prevMetrics?.logs ?? [];
       const updatedLogs = [...prevLogs, ...newLogs].slice(-55); // keep last 55 log lines
       
       if (updatedMetrics[node.id]) {
         updatedMetrics[node.id].logs = updatedLogs;
+      }
+    }
+
+    if (compType === 'message-queue' || compType === 'kafka') {
+      const producedRps = finalInboundRpsMap[node.id] ?? 0;
+      const outEdgesList = outboundEdges[node.id] ?? [];
+      let consumedRps = 0;
+
+      for (const edge of outEdgesList) {
+        const consumerMetrics = updatedMetrics[edge.target];
+        if (consumerMetrics) {
+          consumedRps += consumerMetrics.successRps ?? consumerMetrics.inboundRps;
+        }
+      }
+
+      const lagChange = producedRps - consumedRps;
+      const prevLag = prevMetrics?.consumerLag ?? 0;
+      let newLag = Math.max(0, prevLag + lagChange);
+
+      // Cap lag based on partitionCount or storage
+      const partitionCount = cfg.partitionCount ?? 4;
+      const maxLag = partitionCount * 50000; // e.g. 50k messages per partition
+      newLag = Math.min(newLag, maxLag);
+
+      if (updatedMetrics[node.id]) {
+        updatedMetrics[node.id].consumerLag = Math.round(newLag);
       }
     }
   }
