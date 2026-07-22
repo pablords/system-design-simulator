@@ -11,5 +11,19 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  api:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/system_design
+      JWT_SECRET: super-secret-key-at-least-32-chars-long
+      CORS_ORIGIN: http://localhost:5173
+    depends_on:
+      - db
+
 volumes:
   pgdata:
