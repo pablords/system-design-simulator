@@ -27,6 +27,22 @@ function getApiRedirectUri(c: any, provider: 'github' | 'google'): string {
   return `${protocol}://${host}/api/v1/auth/${provider}/callback`;
 }
 
+function getFrontendUrl(c: any): string {
+  if (env.APP_FRONTEND_URL && !env.APP_FRONTEND_URL.includes('localhost')) {
+    return env.APP_FRONTEND_URL.replace(/\/$/, '');
+  }
+  if (env.CORS_ORIGIN && !env.CORS_ORIGIN.includes('localhost')) {
+    return env.CORS_ORIGIN.replace(/\/$/, '');
+  }
+  const referer = c.req.header('referer') || c.req.header('origin');
+  if (referer) {
+    try {
+      return new URL(referer).origin;
+    } catch {}
+  }
+  return env.APP_FRONTEND_URL.replace(/\/$/, '');
+}
+
 export const authRoutes = new Hono();
 
 // GET /config — Public auth feature flags configuration
@@ -183,9 +199,10 @@ authRoutes.get('/github', (c) => {
 
 // GET /github/callback
 authRoutes.get('/github/callback', async (c) => {
+  const frontendUrl = getFrontendUrl(c);
   const code = c.req.query('code');
   if (!code) {
-    return c.redirect(`${env.APP_FRONTEND_URL}/?error=MissingCode`);
+    return c.redirect(`${frontendUrl}/?error=MissingCode`);
   }
 
   const clientId = env.GITHUB_CLIENT_ID || env.GIT_CLIENT_ID;
@@ -208,7 +225,8 @@ authRoutes.get('/github/callback', async (c) => {
     });
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) {
-      return c.redirect(`${env.APP_FRONTEND_URL}/?error=GitHubAuthFailed`);
+      const errReason = tokenData.error_description || tokenData.error || 'GitHubAuthFailed';
+      return c.redirect(`${frontendUrl}/?error=${encodeURIComponent(errReason)}`);
     }
 
     const userRes = await fetch('https://api.github.com/user', {
@@ -229,7 +247,7 @@ authRoutes.get('/github/callback', async (c) => {
     }
 
     if (!email) {
-      return c.redirect(`${env.APP_FRONTEND_URL}/?error=NoEmailFromGitHub`);
+      return c.redirect(`${frontendUrl}/?error=NoEmailFromGitHub`);
     }
 
     const existing = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
@@ -261,10 +279,11 @@ authRoutes.get('/github/callback', async (c) => {
     }
 
     const token = await signToken(userId);
-    return c.redirect(`${env.APP_FRONTEND_URL}/?token=${token}`);
+    return c.redirect(`${frontendUrl}/?token=${token}`);
   } catch (err) {
     console.error('GitHub OAuth Callback Error:', err);
-    return c.redirect(`${env.APP_FRONTEND_URL}/?error=OAuthServerError`);
+    const errReason = err instanceof Error ? err.message : 'OAuthServerError';
+    return c.redirect(`${frontendUrl}/?error=${encodeURIComponent(errReason)}`);
   }
 });
 
@@ -280,9 +299,10 @@ authRoutes.get('/google', (c) => {
 
 // GET /google/callback
 authRoutes.get('/google/callback', async (c) => {
+  const frontendUrl = getFrontendUrl(c);
   const code = c.req.query('code');
   if (!code) {
-    return c.redirect(`${env.APP_FRONTEND_URL}/?error=MissingCode`);
+    return c.redirect(`${frontendUrl}/?error=MissingCode`);
   }
 
   try {
@@ -301,7 +321,8 @@ authRoutes.get('/google/callback', async (c) => {
 
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) {
-      return c.redirect(`${env.APP_FRONTEND_URL}/?error=GoogleAuthFailed`);
+      const errReason = tokenData.error_description || tokenData.error || 'GoogleAuthFailed';
+      return c.redirect(`${frontendUrl}/?error=${encodeURIComponent(errReason)}`);
     }
 
     const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
@@ -310,7 +331,7 @@ authRoutes.get('/google/callback', async (c) => {
     const gUser = await userRes.json();
 
     if (!gUser.email) {
-      return c.redirect(`${env.APP_FRONTEND_URL}/?error=NoEmailFromGoogle`);
+      return c.redirect(`${frontendUrl}/?error=NoEmailFromGoogle`);
     }
 
     const existing = await db.select().from(schema.users).where(eq(schema.users.email, gUser.email)).limit(1);
@@ -342,9 +363,10 @@ authRoutes.get('/google/callback', async (c) => {
     }
 
     const token = await signToken(userId);
-    return c.redirect(`${env.APP_FRONTEND_URL}/?token=${token}`);
+    return c.redirect(`${frontendUrl}/?token=${token}`);
   } catch (err) {
     console.error('Google OAuth Callback Error:', err);
-    return c.redirect(`${env.APP_FRONTEND_URL}/?error=OAuthServerError`);
+    const errReason = err instanceof Error ? err.message : 'OAuthServerError';
+    return c.redirect(`${frontendUrl}/?error=${encodeURIComponent(errReason)}`);
   }
 });

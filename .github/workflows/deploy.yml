@@ -83,6 +83,8 @@ jobs:
               GITHUB_CLIENT_SECRET="${{ secrets.GIT_CLIENT_SECRET }}" \
               GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
               GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+              APP_FRONTEND_URL="https://pablords.github.io/system-design-simulator" \
+              CORS_ORIGIN="https://pablords.github.io" \
               --service "@system-design/api" || true
           fi
           railway up --service "@system-design/api" --detach
