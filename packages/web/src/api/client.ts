@@ -1,4 +1,10 @@
-const rawBase = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+const defaultBase = isLocal
+  ? 'http://localhost:3000'
+  : 'https://system-designapi-production.up.railway.app';
+
+const rawBase = import.meta.env.VITE_API_URL || defaultBase;
 const API_BASE = rawBase.replace(/\/$/, '');
 
 class ApiClient {
