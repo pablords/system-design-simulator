@@ -83,8 +83,8 @@ jobs:
               GITHUB_CLIENT_SECRET="${{ secrets.GIT_CLIENT_SECRET }}" \
               GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
               GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
-              --service @system-design/api || true
+              --service "@system-design/api" || true
           fi
-          railway up --service api --detach
+          railway up --service "@system-design/api" --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
