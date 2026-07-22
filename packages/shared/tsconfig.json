@@ -9,6 +9,7 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true,
+    "ignoreDeprecations": "6.0",
     "outDir": "./dist"
   },
   "include": ["src"]
