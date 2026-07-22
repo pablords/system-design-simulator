@@ -17,7 +17,7 @@ interface ToolbarProps {
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen, onTogglePalette, showCalculator, onToggleCalculator, onAuthClick, onDashboardClick, isAuthenticated }) => {
-  const { simulation, startSimulation, pauseSimulation, resetSimulation, setSimulationSpeed, clearCanvas, loadPreset, setGlobalTrafficScale, backendConnected, checkBackendHealth } = useSimulatorStore();
+  const { simulation, startSimulation, pauseSimulation, resetSimulation, setSimulationSpeed, clearCanvas, loadPreset, setGlobalTrafficScale, checkBackendHealth } = useSimulatorStore();
   const { currentProjectName } = useProjectStore();
   const { user, logout } = useAuthStore();
   const [showPresets, setShowPresets] = useState(false);
@@ -68,24 +68,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen,
         </button>
         <Zap size={20} className="brand-icon" />
         <span className="brand-name">SysDesign Simulator</span>
-        <span
-          title={backendConnected ? "Motor local otimizado (0ms de latência) com auditoria periódica no backend" : "Motor local otimizado rodando no navegador"}
-          style={{
-            fontSize: '11px',
-            padding: '2px 8px',
-            borderRadius: '12px',
-            marginLeft: '10px',
-            fontWeight: 600,
-            background: 'rgba(34, 197, 94, 0.15)',
-            color: '#4ade80',
-            border: '1px solid rgba(34, 197, 94, 0.3)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px',
-          }}
-        >
-          {backendConnected ? '⚡ Motor Otimizado (Sync Background)' : '⚡ Motor Local'}
-        </span>
+
         {isAuthenticated && currentProjectName && (
           <span style={{ color: '#64748b', fontSize: '13px', marginLeft: '8px', fontWeight: 400 }}>
             / {currentProjectName}
