@@ -29,8 +29,21 @@ function getApiRedirectUri(c: any, provider: 'github' | 'google'): string {
 
 export const authRoutes = new Hono();
 
+// GET /config — Public auth feature flags configuration
+authRoutes.get('/config', (c) => {
+  return c.json({
+    enableEmailAuth: env.enableEmailAuth,
+    hasGithub: Boolean(env.GITHUB_CLIENT_ID || env.GIT_CLIENT_ID),
+    hasGoogle: Boolean(env.GOOGLE_CLIENT_ID),
+  });
+});
+
 // POST /register
 authRoutes.post('/register', async (c) => {
+  if (!env.enableEmailAuth) {
+    return c.json({ error: 'Forbidden', message: 'Cadastro por e-mail e senha está temporariamente desativado.', statusCode: 403 }, 403);
+  }
+
   const body = registerSchema.parse(await c.req.json());
 
   const existing = await db
@@ -82,6 +95,10 @@ authRoutes.post('/register', async (c) => {
 
 // POST /login
 authRoutes.post('/login', async (c) => {
+  if (!env.enableEmailAuth) {
+    return c.json({ error: 'Forbidden', message: 'Login por e-mail e senha está temporariamente desativado.', statusCode: 403 }, 403);
+  }
+
   const body = loginSchema.parse(await c.req.json());
 
   const [user] = await db

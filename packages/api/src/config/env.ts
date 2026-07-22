@@ -14,11 +14,13 @@ const envSchema = z.object({
   GITHUB_CLIENT_SECRET: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  ENABLE_EMAIL_AUTH: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema> & {
   githubClientId?: string;
   githubClientSecret?: string;
+  enableEmailAuth: boolean;
 };
 
 function loadEnv(): Env {
@@ -41,6 +43,8 @@ function loadEnv(): Env {
   const data = result.data;
   const githubClientId = data.GITHUB_CLIENT_ID || data.GIT_CLIENT_ID;
   const githubClientSecret = data.GITHUB_CLIENT_SECRET || data.GIT_CLIENT_SECRET;
+  // Default to false as requested by feature flag
+  const enableEmailAuth = data.ENABLE_EMAIL_AUTH === 'true' || data.ENABLE_EMAIL_AUTH === '1';
 
   return {
     ...data,
@@ -48,6 +52,7 @@ function loadEnv(): Env {
     GITHUB_CLIENT_SECRET: githubClientSecret,
     githubClientId,
     githubClientSecret,
+    enableEmailAuth,
   };
 }
 

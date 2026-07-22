@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogIn, UserPlus, Mail, Lock, User, X, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
@@ -13,10 +13,24 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [showEmailForm, setShowEmailForm] = useState(false);
+  const [enableEmailAuth, setEnableEmailAuth] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const { login, register, isLoading, error, clearError } = useAuthStore();
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/v1/auth/config`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && typeof data.enableEmailAuth === 'boolean') {
+          setEnableEmailAuth(data.enableEmailAuth);
+        }
+      })
+      .catch(() => {
+        setEnableEmailAuth(false);
+      });
+  }, []);
 
   const handleOAuthLogin = (provider: 'github' | 'google') => {
     window.location.href = `${API_BASE}/api/v1/auth/${provider}`;
@@ -105,93 +119,97 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
             </button>
           </div>
 
-          <div className="auth-divider">
-            <span>ou entre com e-mail</span>
-          </div>
-
-          {!showEmailForm ? (
-            <button className="btn-toggle-email" onClick={() => setShowEmailForm(true)}>
-              <Mail size={16} />
-              {mode === 'login' ? 'Entrar com E-mail e Senha' : 'Cadastrar com E-mail e Senha'}
-            </button>
-          ) : (
+          {enableEmailAuth && (
             <>
-              <div className="auth-tabs">
-                <button
-                  className={`auth-tab ${mode === 'login' ? 'active' : ''}`}
-                  onClick={() => switchMode('login')}
-                >
-                  <LogIn size={14} style={{ marginRight: 6 }} />
-                  Entrar
-                </button>
-                <button
-                  className={`auth-tab ${mode === 'register' ? 'active' : ''}`}
-                  onClick={() => switchMode('register')}
-                >
-                  <UserPlus size={14} style={{ marginRight: 6 }} />
-                  Criar Conta
-                </button>
+              <div className="auth-divider">
+                <span>ou entre com e-mail</span>
               </div>
 
-              <form className="auth-form" onSubmit={handleSubmit}>
-                {mode === 'register' && (
-                  <div className="auth-field">
-                    <label htmlFor="auth-name">Nome</label>
-                    <div className="input-wrapper">
-                      <User size={16} style={{ color: '#64748b' }} />
-                      <input
-                        id="auth-name"
-                        type="text"
-                        placeholder="Seu nome"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="auth-field">
-                  <label htmlFor="auth-email">E-mail</label>
-                  <div className="input-wrapper">
-                    <Mail size={16} style={{ color: '#64748b' }} />
-                    <input
-                      id="auth-email"
-                      type="email"
-                      placeholder="seu@email.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="auth-field">
-                  <label htmlFor="auth-password">Senha</label>
-                  <div className="input-wrapper">
-                    <Lock size={16} style={{ color: '#64748b' }} />
-                    <input
-                      id="auth-password"
-                      type="password"
-                      placeholder={mode === 'register' ? 'Mínimo 8 caracteres' : 'Sua senha'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                      minLength={mode === 'register' ? 8 : undefined}
-                    />
-                  </div>
-                </div>
-
-                <button className="auth-submit" type="submit" disabled={isLoading}>
-                  {isLoading ? (
-                    <><Loader2 size={16} className="spin" /> Aguarde...</>
-                  ) : mode === 'login' ? (
-                    <><LogIn size={16} /> Entrar com E-mail</>
-                  ) : (
-                    <><UserPlus size={16} /> Criar Conta com E-mail</>
-                  )}
+              {!showEmailForm ? (
+                <button className="btn-toggle-email" onClick={() => setShowEmailForm(true)}>
+                  <Mail size={16} />
+                  {mode === 'login' ? 'Entrar com E-mail e Senha' : 'Cadastrar com E-mail e Senha'}
                 </button>
-              </form>
+              ) : (
+                <>
+                  <div className="auth-tabs">
+                    <button
+                      className={`auth-tab ${mode === 'login' ? 'active' : ''}`}
+                      onClick={() => switchMode('login')}
+                    >
+                      <LogIn size={14} style={{ marginRight: 6 }} />
+                      Entrar
+                    </button>
+                    <button
+                      className={`auth-tab ${mode === 'register' ? 'active' : ''}`}
+                      onClick={() => switchMode('register')}
+                    >
+                      <UserPlus size={14} style={{ marginRight: 6 }} />
+                      Criar Conta
+                    </button>
+                  </div>
+
+                  <form className="auth-form" onSubmit={handleSubmit}>
+                    {mode === 'register' && (
+                      <div className="auth-field">
+                        <label htmlFor="auth-name">Nome</label>
+                        <div className="input-wrapper">
+                          <User size={16} style={{ color: '#64748b' }} />
+                          <input
+                            id="auth-name"
+                            type="text"
+                            placeholder="Seu nome"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            required
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="auth-field">
+                      <label htmlFor="auth-email">E-mail</label>
+                      <div className="input-wrapper">
+                        <Mail size={16} style={{ color: '#64748b' }} />
+                        <input
+                          id="auth-email"
+                          type="email"
+                          placeholder="seu@email.com"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="auth-field">
+                      <label htmlFor="auth-password">Senha</label>
+                      <div className="input-wrapper">
+                        <Lock size={16} style={{ color: '#64748b' }} />
+                        <input
+                          id="auth-password"
+                          type="password"
+                          placeholder={mode === 'register' ? 'Mínimo 8 caracteres' : 'Sua senha'}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          required
+                          minLength={mode === 'register' ? 8 : undefined}
+                        />
+                      </div>
+                    </div>
+
+                    <button className="auth-submit" type="submit" disabled={isLoading}>
+                      {isLoading ? (
+                        <><Loader2 size={16} className="spin" /> Aguarde...</>
+                      ) : mode === 'login' ? (
+                        <><LogIn size={16} /> Entrar com E-mail</>
+                      ) : (
+                        <><UserPlus size={16} /> Criar Conta com E-mail</>
+                      )}
+                    </button>
+                  </form>
+                </>
+              )}
             </>
           )}
         </motion.div>

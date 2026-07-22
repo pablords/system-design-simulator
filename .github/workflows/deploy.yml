@@ -64,8 +64,6 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    environment:
-      name: production-api
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -73,7 +71,7 @@ jobs:
       - name: Install Railway CLI
         run: npm i -g @railway/cli
 
-      - name: Set Railway Environment Variables & Deploy
+      - name: Sync Secrets & Deploy API to Railway
         run: |
           if [ -n "${{ secrets.GIT_CLIENT_ID }}" ]; then
             railway vars set \
@@ -85,6 +83,6 @@ jobs:
               GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
               --service api || true
           fi
-          railway up --service api
+          railway up --service api --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
