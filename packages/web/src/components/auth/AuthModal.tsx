@@ -6,11 +6,19 @@ import './auth-modal.css';
 
 interface AuthModalProps {
   onClose: () => void;
+  isMandatory?: boolean;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
+const defaultBase = isLocal
+  ? 'http://localhost:3000'
+  : 'https://system-designapi-production.up.railway.app';
+
+const rawBase = import.meta.env.VITE_API_URL || defaultBase;
+const API_BASE = rawBase.replace(/\/$/, '');
+
+export const AuthModal: React.FC<AuthModalProps> = ({ onClose, isMandatory = false }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [enableEmailAuth, setEnableEmailAuth] = useState(false);
@@ -62,7 +70,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        onClick={onClose}
+        onClick={isMandatory ? undefined : onClose}
       >
         <motion.div
           className="auth-modal"
@@ -72,16 +80,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
           transition={{ type: 'spring', duration: 0.4 }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button className="auth-close" onClick={onClose}>
-            <X size={20} />
-          </button>
+          {!isMandatory && (
+            <button className="auth-close" onClick={onClose} title="Fechar">
+              <X size={20} />
+            </button>
+          )}
 
           <h2 className="auth-title">
-            {mode === 'login' ? 'Bem-vindo de volta' : 'Criar conta'}
+            {mode === 'login' ? 'Bem-vindo ao SysDesign Simulator' : 'Criar conta'}
           </h2>
           <p className="auth-subtitle">
             {mode === 'login'
-              ? 'Entre para salvar e sincronizar seus projetos'
+              ? 'Entre com sua conta social para acessar o simulador e seus projetos'
               : 'Crie sua conta para começar a projetar'}
           </p>
 

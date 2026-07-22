@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Pause, RotateCcw, Save, FolderOpen, Trash2, Zap, ChevronDown, Menu, Calculator, LogIn, LayoutDashboard, User } from 'lucide-react';
+import { Play, Pause, RotateCcw, Save, FolderOpen, Trash2, Zap, ChevronDown, Menu, Calculator, LogIn, LayoutDashboard, LogOut } from 'lucide-react';
 import { useSimulatorStore } from '../../store/simulatorStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useAuthStore } from '../../store/authStore';
@@ -19,7 +19,7 @@ interface ToolbarProps {
 export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen, onTogglePalette, showCalculator, onToggleCalculator, onAuthClick, onDashboardClick, isAuthenticated }) => {
   const { simulation, startSimulation, pauseSimulation, resetSimulation, setSimulationSpeed, clearCanvas, loadPreset, setGlobalTrafficScale, backendConnected, checkBackendHealth } = useSimulatorStore();
   const { currentProjectName } = useProjectStore();
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const [showPresets, setShowPresets] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [tempGlobalLoad, setTempGlobalLoad] = useState(String(simulation.globalTrafficScale ?? 100));
@@ -69,7 +69,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen,
         <Zap size={20} className="brand-icon" />
         <span className="brand-name">SysDesign Simulator</span>
         <span
-          title={backendConnected ? "Motor de simulação rodando via API Backend (localhost:3000)" : "Motor de simulação rodando Local (Fallback)"}
+          title={backendConnected ? "Motor de simulação rodando via API Backend" : "Motor de simulação rodando Local (Fallback)"}
           style={{
             fontSize: '11px',
             padding: '2px 8px',
@@ -220,14 +220,23 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen,
           <span className="btn-text">Load</span>
         </button>
 
-        {/* Auth / Dashboard button */}
+        {/* Auth / Dashboard buttons */}
         {isAuthenticated ? (
-          <button className="btn btn-ghost" onClick={onDashboardClick} title="Meus Projetos">
-            <LayoutDashboard size={16} />
-            <span className="btn-text">{user?.name?.split(' ')[0] || 'Projetos'}</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button className="btn btn-ghost" onClick={onDashboardClick} title="Meus Projetos">
+              {user?.avatarUrl ? (
+                <img src={user.avatarUrl} alt={user.name} style={{ width: '20px', height: '20px', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <LayoutDashboard size={16} />
+              )}
+              <span className="btn-text">{user?.name?.split(' ')[0] || 'Projetos'}</span>
+            </button>
+            <button className="btn btn-ghost" onClick={logout} title="Sair da Conta">
+              <LogOut size={16} />
+            </button>
+          </div>
         ) : (
-          <button className="btn btn-ghost" onClick={onAuthClick} title="Entrar">
+          <button className="btn btn-ghost" onClick={onAuthClick} title="Entrar na sua conta">
             <LogIn size={16} />
             <span className="btn-text">Entrar</span>
           </button>
@@ -283,12 +292,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen,
                 <>
                   <button className="dropdown-item" onClick={() => { onDashboardClick(); setShowMobileMenu(false); }}>
                     <LayoutDashboard size={14} style={{ marginRight: 6 }} />
-                    Meus Projetos
+                    Meus Projetos ({user?.name?.split(' ')[0]})
+                  </button>
+                  <button className="dropdown-item danger" onClick={() => { logout(); setShowMobileMenu(false); }}>
+                    <LogOut size={14} style={{ marginRight: 6 }} />
+                    Sair da Conta
                   </button>
                 </>
               ) : (
                 <button className="dropdown-item" onClick={() => { onAuthClick(); setShowMobileMenu(false); }}>
-                  <User size={14} style={{ marginRight: 6 }} />
+                  <LogIn size={14} style={{ marginRight: 6 }} />
                   Entrar / Criar Conta
                 </button>
               )}

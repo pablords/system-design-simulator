@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, Copy, LogOut, Folder, Clock } from 'lucide-react';
+import { Plus, Trash2, Copy, LogOut, Folder, Clock, ArrowLeft, User } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { useAuthStore } from '../../store/authStore';
 import './dashboard.css';
@@ -8,6 +8,7 @@ import './dashboard.css';
 interface DashboardProps {
   onOpenProject: (id: string) => void;
   onNewProject: () => void;
+  onBackToEditor: () => void;
 }
 
 const CARD_GRADIENTS = [
@@ -27,7 +28,7 @@ const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
   minute: '2-digit',
 });
 
-export const Dashboard: React.FC<DashboardProps> = ({ onOpenProject, onNewProject }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ onOpenProject, onNewProject, onBackToEditor }) => {
   const { projects, isLoadingProjects, fetchProjects, deleteProject, cloneProject } = useProjectStore();
   const { user, logout } = useAuthStore();
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -52,16 +53,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenProject, onNewProjec
     await cloneProject(id);
   };
 
+  const handleLogout = () => {
+    logout();
+    onBackToEditor();
+  };
+
   return (
     <div className="dashboard">
       <header className="dashboard-header">
-        <h1 className="dashboard-title">
-          <Folder size={24} />
-          Meus Projetos
-        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button className="btn btn-ghost" onClick={onBackToEditor} title="Voltar ao Editor Canvas">
+            <ArrowLeft size={18} />
+            <span>Voltar ao Editor</span>
+          </button>
+          <h1 className="dashboard-title">
+            <Folder size={22} />
+            Meus Projetos
+          </h1>
+        </div>
+
         <div className="dashboard-user">
+          {user?.avatarUrl ? (
+            <img
+              src={user.avatarUrl}
+              alt={user.name}
+              style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }}
+            />
+          ) : (
+            <User size={18} style={{ color: '#94a3b8' }} />
+          )}
           <span className="dashboard-user-name">{user?.name}</span>
-          <button className="card-action-btn" onClick={logout} title="Sair">
+          <button className="card-action-btn" onClick={handleLogout} title="Sair da Conta">
             <LogOut size={16} />
           </button>
         </div>

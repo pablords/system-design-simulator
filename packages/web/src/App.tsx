@@ -42,6 +42,8 @@ function App() {
     if (token) {
       api.setToken(token);
       window.history.replaceState({}, document.title, window.location.pathname);
+      // Auto open dashboard on OAuth login success
+      setView('dashboard');
     } else if (errorParam) {
       console.error('OAuth Authentication Error:', errorParam);
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -101,12 +103,10 @@ function App() {
   const handleGoToDashboard = useCallback(() => {
     if (isAuthenticated) {
       setView('dashboard');
-    } else {
-      setShowAuthModal(true);
     }
   }, [isAuthenticated]);
 
-  // Show loading while checking auth
+  // Show loading while checking auth status
   if (authLoading) {
     return (
       <div className="app-shell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -115,12 +115,22 @@ function App() {
     );
   }
 
-  // Show dashboard view
-  if (view === 'dashboard' && isAuthenticated) {
+  // Strict Auth Gate: Block entire application if user is not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="app-shell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0f1d' }}>
+        <AuthModal onClose={() => {}} isMandatory />
+      </div>
+    );
+  }
+
+  // Show dashboard view (only accessible when authenticated)
+  if (view === 'dashboard') {
     return (
       <Dashboard
         onOpenProject={handleOpenProject}
         onNewProject={handleNewProject}
+        onBackToEditor={() => setView('canvas')}
       />
     );
   }
