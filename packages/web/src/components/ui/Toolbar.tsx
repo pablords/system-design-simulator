@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Play, Pause, RotateCcw, Save, FolderOpen, Trash2, Zap, ChevronDown, Menu, Calculator } from 'lucide-react';
+import { Play, Pause, RotateCcw, Save, FolderOpen, Trash2, Zap, ChevronDown, Menu, Calculator, LogIn, LayoutDashboard, User } from 'lucide-react';
 import { useSimulatorStore } from '../../store/simulatorStore';
+import { useProjectStore } from '../../store/projectStore';
+import { useAuthStore } from '../../store/authStore';
 
 interface ToolbarProps {
   onSave: () => void;
@@ -9,10 +11,15 @@ interface ToolbarProps {
   onTogglePalette: () => void;
   showCalculator: boolean;
   onToggleCalculator: () => void;
+  onAuthClick: () => void;
+  onDashboardClick: () => void;
+  isAuthenticated: boolean;
 }
 
-export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen, onTogglePalette, showCalculator, onToggleCalculator }) => {
+export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen, onTogglePalette, showCalculator, onToggleCalculator, onAuthClick, onDashboardClick, isAuthenticated }) => {
   const { simulation, startSimulation, pauseSimulation, resetSimulation, setSimulationSpeed, clearCanvas, loadPreset, setGlobalTrafficScale } = useSimulatorStore();
+  const { currentProjectName } = useProjectStore();
+  const { user } = useAuthStore();
   const [showPresets, setShowPresets] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [tempGlobalLoad, setTempGlobalLoad] = useState(String(simulation.globalTrafficScale ?? 100));
@@ -57,6 +64,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen,
         </button>
         <Zap size={20} className="brand-icon" />
         <span className="brand-name">SysDesign Simulator</span>
+        {isAuthenticated && currentProjectName && (
+          <span style={{ color: '#64748b', fontSize: '13px', marginLeft: '8px', fontWeight: 400 }}>
+            / {currentProjectName}
+          </span>
+        )}
       </div>
 
       <div className="toolbar-center">
@@ -185,6 +197,19 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen,
           <FolderOpen size={16} />
           <span className="btn-text">Load</span>
         </button>
+
+        {/* Auth / Dashboard button */}
+        {isAuthenticated ? (
+          <button className="btn btn-ghost" onClick={onDashboardClick} title="Meus Projetos">
+            <LayoutDashboard size={16} />
+            <span className="btn-text">{user?.name?.split(' ')[0] || 'Projetos'}</span>
+          </button>
+        ) : (
+          <button className="btn btn-ghost" onClick={onAuthClick} title="Entrar">
+            <LogIn size={16} />
+            <span className="btn-text">Entrar</span>
+          </button>
+        )}
       </div>
 
       {/* Tablet/Mobile View (visible on iPad/mobile <= 1200px) */}
@@ -229,6 +254,22 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen,
                 <Trash2 size={14} style={{ marginRight: 6 }} />
                 Limpar Canvas
               </button>
+
+              <div className="dropdown-divider" />
+              <div className="dropdown-header">Conta</div>
+              {isAuthenticated ? (
+                <>
+                  <button className="dropdown-item" onClick={() => { onDashboardClick(); setShowMobileMenu(false); }}>
+                    <LayoutDashboard size={14} style={{ marginRight: 6 }} />
+                    Meus Projetos
+                  </button>
+                </>
+              ) : (
+                <button className="dropdown-item" onClick={() => { onAuthClick(); setShowMobileMenu(false); }}>
+                  <User size={14} style={{ marginRight: 6 }} />
+                  Entrar / Criar Conta
+                </button>
+              )}
             </div>
           )}
         </div>

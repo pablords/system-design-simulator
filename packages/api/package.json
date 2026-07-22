@@ -1,0 +1,35 @@
+{
+  "name": "@system-design/api",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "start": "node dist/index.js",
+    "lint": "oxlint",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@system-design/shared": "*",
+    "@hono/node-server": "^1",
+    "@neondatabase/serverless": "^1",
+    "bcrypt": "^6",
+    "drizzle-orm": "^0.44",
+    "hono": "^4",
+    "jose": "^6",
+    "zod": "^3"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5",
+    "@types/node": "^24",
+    "drizzle-kit": "^0.31",
+    "oxlint": "^1",
+    "tsup": "^8",
+    "tsx": "^4",
+    "typescript": "~6.0.2"
+  }
+}

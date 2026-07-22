@@ -53,66 +53,56 @@ export type NodeStatus = 'idle' | 'ok' | 'warning' | 'critical';
 
 export interface ComponentConfig {
   label: string;
-  notes?: string;          // custom notes / annotations on nodes
+  notes?: string;
   replicas?: number;
   maxRps?: number;
   cpuCores?: number;
   ramGb?: number;
   storageGb?: number;
-  cacheHitRate?: number; // 0-1, only for cache nodes
-  connectionPool?: number; // max concurrent connections (e.g. for database, cache)
-  timeoutMs?: number;      // source request timeout limit
-  rateLimiterEnabled?: boolean; // semaphore / rate limiter active
-  writeRatio?: number;     // 0-1, write ratio of generated traffic (sources only)
-  errorRate?: number;      // manual failure rate injected (0 to 1)
-  circuitBreakerEnabled?: boolean; // CB enabled
-  cbFailureThreshold?: number;     // failure rate threshold (0 to 1)
-  cbSleepWindowTicks?: number;     // ticks in OPEN before going HALF-OPEN
-  clientLatencyMs?: number;      // Latency of last-mile/client ping
-
-  // Load Balancer
+  cacheHitRate?: number;
+  connectionPool?: number;
+  timeoutMs?: number;
+  rateLimiterEnabled?: boolean;
+  writeRatio?: number;
+  errorRate?: number;
+  circuitBreakerEnabled?: boolean;
+  cbFailureThreshold?: number;
+  cbSleepWindowTicks?: number;
+  clientLatencyMs?: number;
   lbAlgorithm?: 'round-robin' | 'least-connections';
-
-  // Auto-scaling
   autoscalingEnabled?: boolean;
   maxReplicas?: number;
-
-  // Database
   dbReplication?: 'standalone' | 'master-replica';
   readWriteSplittingEnabled?: boolean;
-
-  // Cache
   evictionPolicy?: 'lru' | 'lfu' | 'fifo' | 'none';
   memoryLimitMb?: number;
-
-  // Message Queue & Kafka
   deliveryGuarantee?: 'at-least-once' | 'at-most-once' | 'exactly-once';
   partitionCount?: number;
 }
 
 export interface EdgeMetrics {
   rps: number;
-  readRps?: number;  // read component of traffic
-  writeRps?: number; // write component of traffic
+  readRps?: number;
+  writeRps?: number;
   queueSize: number;
   latencyMs: number;
   timeoutsPerSecond: number;
-  failuresPerSecond?: number; // failed requests per second on edge
+  failuresPerSecond?: number;
   status: 'ok' | 'warning' | 'critical';
-  queueWaitTimeMs?: number;   // Time spent in queue before target processing
+  queueWaitTimeMs?: number;
 }
 
 export interface SimulatorEdgeData extends Record<string, unknown> {
   metrics?: EdgeMetrics;
   trafficType?: 'all' | 'read' | 'write';
-  networkLatencyMs?: number;  // Network transit delay (RTT) in ms
-  label?: string;             // Friendly name for connection
+  networkLatencyMs?: number;
+  label?: string;
 }
 
 export interface NodeMetrics {
   inboundRps: number;
-  inboundReadRps?: number;  // read component of inbound traffic
-  inboundWriteRps?: number; // write component of inbound traffic
+  inboundReadRps?: number;
+  inboundWriteRps?: number;
   outboundRps: number;
   cpuPct: number;
   ramPct: number;
@@ -124,20 +114,14 @@ export interface NodeMetrics {
   endToEndLatencyMs?: number;
   consecutiveOverloadTicks?: number;
   restartCooldownTicks?: number;
-  
-  // Resilience metrics
   successRps?: number;
   failedRps?: number;
   cbState?: 'CLOSED' | 'OPEN' | 'HALF-OPEN';
   cbOpenTimer?: number;
-
-  // Observability metrics
   p50?: number;
   p95?: number;
   p99?: number;
   logs?: string[];
-
-  // Role-specific metrics
   activeReplicas?: number;
   consumerLag?: number;
 }
@@ -181,7 +165,7 @@ export interface SimulationState {
   speed: SimulationSpeed;
   totalRps: number;
   bottlenecks: Bottleneck[];
-  globalTrafficScale: number; // 0% to 500% traffic factor
+  globalTrafficScale: number;
 }
 
 export interface SavedScenario {
@@ -190,4 +174,42 @@ export interface SavedScenario {
   nodes: unknown[];
   edges: unknown[];
   savedAt: string;
+}
+
+// === API Types (used by both frontend and backend) ===
+
+export interface ApiProject {
+  id: string;
+  userId: string;
+  name: string;
+  description: string | null;
+  canvas: CanvasData;
+  thumbnail: string | null;
+  isPublic: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CanvasData {
+  nodes: unknown[];
+  edges: unknown[];
+  viewport?: { x: number; y: number; zoom: number };
+}
+
+export interface ApiUser {
+  id: string;
+  email: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface AuthResponse {
+  user: ApiUser;
+  token: string;
+}
+
+export interface ApiError {
+  error: string;
+  message: string;
+  statusCode: number;
 }
