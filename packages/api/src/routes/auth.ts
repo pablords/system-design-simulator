@@ -21,6 +21,12 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+function getApiRedirectUri(c: any, provider: 'github' | 'google'): string {
+  const host = c.req.header('host') || `localhost:${env.PORT}`;
+  const protocol = c.req.header('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
+  return `${protocol}://${host}/api/v1/auth/${provider}/callback`;
+}
+
 export const authRoutes = new Hono();
 
 // POST /register
@@ -149,11 +155,12 @@ authRoutes.post('/logout', async (c) => {
 
 // GET /github — Redirect to GitHub OAuth Authorization
 authRoutes.get('/github', (c) => {
-  if (!env.GITHUB_CLIENT_ID) {
-    return c.json({ error: 'NotConfigured', message: 'GITHUB_CLIENT_ID is not configured in API environment', statusCode: 500 }, 500);
+  const clientId = env.GITHUB_CLIENT_ID || env.GIT_CLIENT_ID;
+  if (!clientId) {
+    return c.json({ error: 'NotConfigured', message: 'GITHUB_CLIENT_ID/GIT_CLIENT_ID is not configured in API environment', statusCode: 500 }, 500);
   }
-  const redirectUri = `${env.CORS_ORIGIN}/api/v1/auth/github/callback`;
-  const url = `https://github.com/login/oauth/authorize?client_id=${env.GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user:email`;
+  const redirectUri = getApiRedirectUri(c, 'github');
+  const url = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user:email`;
   return c.redirect(url);
 });
 
@@ -164,8 +171,11 @@ authRoutes.get('/github/callback', async (c) => {
     return c.redirect(`${env.APP_FRONTEND_URL}/?error=MissingCode`);
   }
 
+  const clientId = env.GITHUB_CLIENT_ID || env.GIT_CLIENT_ID;
+  const clientSecret = env.GITHUB_CLIENT_SECRET || env.GIT_CLIENT_SECRET;
+
   try {
-    // 1. Exchange code for access_token
+    const redirectUri = getApiRedirectUri(c, 'github');
     const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: {
@@ -173,9 +183,10 @@ authRoutes.get('/github/callback', async (c) => {
         Accept: 'application/json',
       },
       body: JSON.stringify({
-        client_id: env.GITHUB_CLIENT_ID,
-        client_secret: env.GITHUB_CLIENT_SECRET,
+        client_id: clientId,
+        client_secret: clientSecret,
         code,
+        redirect_uri: redirectUri,
       }),
     });
     const tokenData = await tokenRes.json();
@@ -183,13 +194,11 @@ authRoutes.get('/github/callback', async (c) => {
       return c.redirect(`${env.APP_FRONTEND_URL}/?error=GitHubAuthFailed`);
     }
 
-    // 2. Fetch GitHub User Profile
     const userRes = await fetch('https://api.github.com/user', {
       headers: { Authorization: `Bearer ${tokenData.access_token}`, 'User-Agent': 'System-Design-Simulator' },
     });
     const ghUser = await userRes.json();
 
-    // 3. Fetch primary email if missing
     let email = ghUser.email;
     if (!email) {
       const emailRes = await fetch('https://api.github.com/user/emails', {
@@ -206,7 +215,6 @@ authRoutes.get('/github/callback', async (c) => {
       return c.redirect(`${env.APP_FRONTEND_URL}/?error=NoEmailFromGitHub`);
     }
 
-    // 4. Upsert user in database
     const existing = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
 
     let userId: string;
@@ -235,7 +243,6 @@ authRoutes.get('/github/callback', async (c) => {
       userId = inserted.id;
     }
 
-    // 5. Sign JWT and redirect to frontend
     const token = await signToken(userId);
     return c.redirect(`${env.APP_FRONTEND_URL}/?token=${token}`);
   } catch (err) {
@@ -249,7 +256,7 @@ authRoutes.get('/google', (c) => {
   if (!env.GOOGLE_CLIENT_ID) {
     return c.json({ error: 'NotConfigured', message: 'GOOGLE_CLIENT_ID is not configured in API environment', statusCode: 500 }, 500);
   }
-  const redirectUri = `${env.CORS_ORIGIN}/api/v1/auth/google/callback`;
+  const redirectUri = getApiRedirectUri(c, 'google');
   const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${env.GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=openid%20email%20profile`;
   return c.redirect(url);
 });
@@ -262,7 +269,7 @@ authRoutes.get('/google/callback', async (c) => {
   }
 
   try {
-    const redirectUri = `${env.CORS_ORIGIN}/api/v1/auth/google/callback`;
+    const redirectUri = getApiRedirectUri(c, 'google');
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -280,7 +287,6 @@ authRoutes.get('/google/callback', async (c) => {
       return c.redirect(`${env.APP_FRONTEND_URL}/?error=GoogleAuthFailed`);
     }
 
-    // Fetch Google profile
     const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
@@ -300,7 +306,7 @@ authRoutes.get('/google/callback', async (c) => {
         .set({
           avatarUrl: gUser.picture || existing[0].avatarUrl,
           provider: 'google',
-          providerId: String(gUser.id),
+          providerId: String(gUser.id || gUser.sub || ''),
           updatedAt: new Date(),
         })
         .where(eq(schema.users.id, userId));
@@ -312,7 +318,7 @@ authRoutes.get('/google/callback', async (c) => {
           name: gUser.name || 'Google User',
           avatarUrl: gUser.picture || null,
           provider: 'google',
-          providerId: String(gUser.id),
+          providerId: String(gUser.id || gUser.sub || ''),
         })
         .returning({ id: schema.users.id });
       userId = inserted.id;

@@ -14,13 +14,14 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@system-design/shared": "*",
     "@hono/node-server": "^1",
     "@neondatabase/serverless": "^1",
+    "@system-design/shared": "*",
     "bcrypt": "^6",
     "drizzle-orm": "^0.44",
     "hono": "^4",
     "jose": "^6",
+    "postgres": "^3.4.9",
     "zod": "^3"
   },
   "devDependencies": {

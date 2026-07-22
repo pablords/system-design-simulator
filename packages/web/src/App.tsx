@@ -34,12 +34,16 @@ function App() {
   // Enable auto-save when authenticated and working on a project
   useAutoSave();
 
-  // Check auth and capture URL OAuth token on mount
+  // Check auth and capture URL OAuth token or error on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
+    const errorParam = params.get('error');
     if (token) {
       api.setToken(token);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (errorParam) {
+      console.error('OAuth Authentication Error:', errorParam);
       window.history.replaceState({}, document.title, window.location.pathname);
     }
     checkAuth();
