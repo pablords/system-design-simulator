@@ -1,94 +1,111 @@
-# 💻 System Design Simulator
+# ⚡ System Design Simulator
 
-Uma ferramenta interativa para desenhar, simular e analisar arquiteturas de sistemas distribuídos em tempo real. Este projeto permite construir diagramas com componentes comuns de infraestrutura e observar o comportamento do sistema sob carga, identificando gargalos de desempenho.
+Uma plataforma full-stack e interativa para desenhar, simular e analisar arquiteturas de sistemas distribuídos em tempo real. O projeto permite construir diagramas de infraestrutura, simular tráfego, testar falhas de resiliência (Circuit Breakers, Auto-scaling, Crashes) e persistir projetos na nuvem.
+
+---
+
+## 🏗️ Arquitetura Monorepo
+
+O projeto está estruturado como um monorepo gerenciado por **Turborepo** e **npm workspaces**:
+
+```
+system-design-app/
+├── packages/
+│   ├── web/        # Frontend (React 19, @xyflow/react, Zustand, Recharts, Framer Motion)
+│   ├── api/        # Backend API (Node.js 24, Hono, Drizzle ORM, JWT, SSE Stream)
+│   └── shared/     # Pacote Compartilhado (Motor de simulação puro, tipos TS, calculadoras)
+├── plans/          # Planos de evolução e guias de deploy do projeto
+├── docker-compose.yml # PostgreSQL 17 local para desenvolvimento
+├── turbo.json      # Pipeline de builds e lints paralelos
+└── package.json    # Workspace raiz
+```
 
 ---
 
 ## 🚀 Funcionalidades Principais
 
-*   **Canvas Interativo:** Arraste, conecte e posicione componentes de infraestrutura usando uma interface baseada em `@xyflow/react`.
-*   **Componentes Suportados:**
-    *   **Clientes:** Clientes Web, Clientes Mobile.
-    *   **Rede / Roteamento:** Load Balancers (Balanceadores de Carga), CDNs.
-    *   **Serviços:** Web Servers (Servidores Web), Microserviços.
-    *   **Armazenamento / Filas:** Bancos de Dados (SQL/NoSQL), Caches (como Redis), Filas de Mensagens (Message Queues).
-*   **Motor de Simulação em Tempo Real:** Simulação dinâmica baseada em ciclos (*ticks*), calculando RPS (Requisições por Segundo), latência média, taxas de erro e propagação de carga entre os componentes conectados.
-*   **Detecção de Gargalos (Bottlenecks):** Identificação visual e textual de nós saturados ou com latência acima do limite tolerado.
-*   **Métricas Dinâmicas:** Gráficos interativos em tempo real para monitorar a saúde geral do sistema (construídos com `recharts`).
-*   **Cenários & Presets:** Salve suas próprias configurações no armazenamento local (`localStorage`) ou carregue presets prontos (E-commerce, Streaming de Vídeo, API Simples).
+*   **Canvas Interativo de Arquitetura:** Arraste e conecte mais de 33 componentes de infraestrutura (Clientes, API Gateways, Load Balancers, App Servers, DBs SQL/NoSQL, Caches, Kafka, Observabilidade).
+*   **Motor Server-Side (Hono + SSE):** Simulação determinística de ticks em tempo real via **Server-Sent Events (SSE)** ou HTTP REST, suportando:
+    *   Leitura/Escrita dividida (**CQRS pattern**) e replicação CDC.
+    *   **Circuit Breakers** (transição de estados `CLOSED`, `OPEN`, `HALF-OPEN`).
+    *   Filas de conexão e atraso proporcional por **Little's Law** ($L = \lambda W$).
+    *   **Auto-scaling** dinâmico de réplicas e resfriamento pós-crash.
+*   **Autenticação & Projetos na Nuvem:** Sistema completo de cadastro/login com JWT e salvamento automático do canvas em banco de dados **PostgreSQL / Neon**.
+*   **Painel de Projetos (Dashboard):** Gerenciamento visual dos projetos salvos com ações de clonar, excluir e abrir.
+*   **Calculadora de Capacidades:** Estimativas de RPS médio/pico, requisitos de largura de banda e dimensionamento de cache/disco (Regra de Pareto 80/20).
 
 ---
 
 ## 🛠️ Tecnologias Utilizadas
 
+### Frontend (`@system-design/web`)
 *   **React 19** & **TypeScript**
-*   **Vite** (Build Tool rápida e moderna)
+*   **Vite** (Build tool moderna e ultrarrápida)
 *   **Zustand** (Gerenciamento de estado global)
 *   **@xyflow/react** (Motor de diagramas interativos)
-*   **Framer Motion** (Micro-animações e transições fluidas)
-*   **Recharts** (Gráficos de desempenho em tempo real)
-*   **Lucide React** (Pacote de ícones modernos)
-*   **Oxlint** (Linter ultrarrápido para garantia de qualidade)
+*   **Framer Motion** (Animações fluidas e micro-interações)
+*   **Recharts** (Gráficos em tempo real)
+
+### Backend (`@system-design/api`)
+*   **Node.js 24** & **Hono Framework**
+*   **Drizzle ORM** (TypeScript-first ORM)
+*   **Neon Serverless / PostgreSQL 17** (Banco de dados relacional com JSONB)
+*   **JWT (`jose`) & bcrypt** (Autenticação e segurança)
+*   **Zod** (Validação estrita de esquemas HTTP)
+
+### Tooling & DevOps
+*   **Turborepo** (Orquestração de monorepo e cache de builds)
+*   **Oxlint** (Linter ultrarrápido)
+*   **Docker & Docker Compose** (PostgreSQL local)
+*   **GitHub Actions** (CI/CD para GitHub Pages & Railway)
 
 ---
 
-## 🏃 Como Rodar o Projeto
-
-Siga os passos abaixo para preparar o ambiente e rodar o projeto localmente.
+## 🏃 Como Rodar o Projeto Localmente
 
 ### Pré-requisitos
-Certifique-se de ter instalado em sua máquina:
-*   [Node.js](https://nodejs.org/) (versão **18.0.0** ou superior recomendada)
-*   Gerenciador de pacotes **npm** (instalado automaticamente junto com o Node.js)
+*   [Node.js](https://nodejs.org/) v24.18.0 ou superior (consulte `.nvmrc`)
+*   [Docker](https://www.docker.com/) (opcional, para rodar o banco de dados PostgreSQL local)
 
-### 1. Instalar as Dependências
-Abra o terminal no diretório raiz do projeto e execute o comando abaixo para instalar todas as dependências necessárias:
+### 1. Instalar Dependências
 ```bash
 npm install
 ```
 
-### 2. Iniciar o Servidor de Desenvolvimento
-Para rodar a aplicação localmente com suporte a *Hot Module Replacement (HMR)*:
+### 2. Iniciar Banco de Dados Local (Opcional)
+```bash
+docker compose up -d
+```
+
+### 3. Rodar em Modo de Desenvolvimento (Frontend + Backend)
 ```bash
 npm run dev
 ```
-Após o comando iniciar, o terminal exibirá a URL local (geralmente `http://localhost:5173`). Abra este endereço em seu navegador.
+O comando iniciará o **Frontend** em `http://localhost:5173` e a **API** em `http://localhost:3000`.
 
-### 3. Compilar para Produção (Build)
-Para compilar o projeto e gerar os arquivos otimizados para produção na pasta `dist`:
+### 4. Aplicar Migrations no Banco de Dados
 ```bash
-npm run build
-```
-
-### 4. Visualizar a Compilação de Produção Localmente
-Caso queira testar a build de produção localmente antes de fazer o deploy:
-```bash
-npm run preview
-```
-
-### 5. Executar o Linter (Oxlint)
-Para analisar o código em busca de erros comuns ou problemas de formatação:
-```bash
-npm run lint
+npm run db:push -w @system-design/api
 ```
 
 ---
 
-## 📂 Estrutura de Pastas Principal
+## 🧪 Comandos Úteis
 
-```text
-src/
-├── assets/         # Recursos estáticos (imagens, svgs)
-├── components/     # Componentes visuais organizados por responsabilidade
-│   ├── canvas/     # Canvas de diagramas e representação dos nós (React Flow)
-│   ├── panels/     # Painéis de configuração de parâmetros e de exibição de gráficos
-│   ├── sidebar/    # Paleta de componentes para arrastar ao canvas
-│   └── ui/         # Componentes utilitários de interface comum (Toolbar, botões)
-├── engine/         # Lógica pura do motor de simulação (cálculo de métricas/gargalos)
-├── store/          # Zustand store contendo o estado global do simulador
-├── types/          # Definições de tipos TypeScript do projeto
-├── App.tsx         # Componente raiz da aplicação
-├── index.css       # Folha de estilos global e variáveis do design system
-└── main.tsx        # Ponto de entrada da aplicação
-```
+| Comando | Descrição |
+|---------|-----------|
+| `npm run build` | Compila todos os pacotes (`shared`, `api` e `web`) via Turborepo |
+| `npm run lint` | Executa o linter Oxlint em todos os pacotes |
+| `npm run dev` | Inicia o dev server concorrente do frontend e da API |
+| `npm run db:generate -w @system-design/api` | Gera novas migrations do Drizzle |
+| `npm run db:push -w @system-design/api` | Aplica o schema no PostgreSQL |
+| `npm run db:studio -w @system-design/api` | Abre a interface visual do Drizzle Studio |
 
+---
+
+## 🚢 Deploy para Produção
+
+Consulte o guia completo em [plans/guia_configuracao_deploy.md](plans/guia_configuracao_deploy.md) para:
+1. Configuração do **Neon PostgreSQL** serverless
+2. Deploy do backend no **Railway**
+3. Deploy do frontend no **GitHub Pages**

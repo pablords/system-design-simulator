@@ -17,12 +17,16 @@ interface ToolbarProps {
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen, onTogglePalette, showCalculator, onToggleCalculator, onAuthClick, onDashboardClick, isAuthenticated }) => {
-  const { simulation, startSimulation, pauseSimulation, resetSimulation, setSimulationSpeed, clearCanvas, loadPreset, setGlobalTrafficScale } = useSimulatorStore();
+  const { simulation, startSimulation, pauseSimulation, resetSimulation, setSimulationSpeed, clearCanvas, loadPreset, setGlobalTrafficScale, backendConnected, checkBackendHealth } = useSimulatorStore();
   const { currentProjectName } = useProjectStore();
   const { user } = useAuthStore();
   const [showPresets, setShowPresets] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [tempGlobalLoad, setTempGlobalLoad] = useState(String(simulation.globalTrafficScale ?? 100));
+
+  React.useEffect(() => {
+    checkBackendHealth();
+  }, [checkBackendHealth]);
 
   React.useEffect(() => {
     setTempGlobalLoad(String(simulation.globalTrafficScale ?? 100));
@@ -64,6 +68,24 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen,
         </button>
         <Zap size={20} className="brand-icon" />
         <span className="brand-name">SysDesign Simulator</span>
+        <span
+          title={backendConnected ? "Motor de simulação rodando via API Backend (localhost:3000)" : "Motor de simulação rodando Local (Fallback)"}
+          style={{
+            fontSize: '11px',
+            padding: '2px 8px',
+            borderRadius: '12px',
+            marginLeft: '10px',
+            fontWeight: 600,
+            background: backendConnected ? 'rgba(34, 197, 94, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+            color: backendConnected ? '#4ade80' : '#fef08a',
+            border: `1px solid ${backendConnected ? 'rgba(34, 197, 94, 0.3)' : 'rgba(234, 179, 8, 0.3)'}`,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+          }}
+        >
+          {backendConnected ? '🟢 API Backend' : '⚡ Motor Local'}
+        </span>
         {isAuthenticated && currentProjectName && (
           <span style={{ color: '#64748b', fontSize: '13px', marginLeft: '8px', fontWeight: 400 }}>
             / {currentProjectName}

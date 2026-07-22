@@ -6,6 +6,8 @@ import { env } from './config/env.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { authRoutes } from './routes/auth.js';
 import { projectRoutes } from './routes/projects.js';
+import { simulationRoutes } from './routes/simulation.js';
+import { streamRoutes } from './routes/stream.js';
 
 const app = new Hono();
 
@@ -30,12 +32,15 @@ app.get('/api/health', (c) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     environment: env.NODE_ENV,
+    engine: 'server-side-hono',
   });
 });
 
 // Routes
 app.route('/api/v1/auth', authRoutes);
 app.route('/api/v1/projects', projectRoutes);
+app.route('/api/v1/simulation', simulationRoutes);
+app.route('/api/v1/simulation', streamRoutes);
 
 // Start server
 console.log(`🚀 API server starting on port ${env.PORT}`);

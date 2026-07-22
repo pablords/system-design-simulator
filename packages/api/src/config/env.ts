@@ -12,6 +12,15 @@ const envSchema = z.object({
 export type Env = z.infer<typeof envSchema>;
 
 function loadEnv(): Env {
+  // Load .env automatically if process.loadEnvFile is available (Node 20.6+)
+  if (typeof process.loadEnvFile === 'function') {
+    try {
+      process.loadEnvFile('.env');
+    } catch {
+      // Ignore if .env doesn't exist (e.g. production / container with env vars set)
+    }
+  }
+
   const result = envSchema.safeParse(process.env);
 
   if (!result.success) {

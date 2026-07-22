@@ -49,6 +49,14 @@ class ApiClient {
   post<T>(path: string, body?: unknown) { return this.request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }); }
   put<T>(path: string, body?: unknown) { return this.request<T>(path, { method: 'PUT', body: body ? JSON.stringify(body) : undefined }); }
   delete<T = void>(path: string) { return this.request<T>(path, { method: 'DELETE' }); }
+
+  async checkHealth(): Promise<{ status: string; environment: string; engine?: string }> {
+    return this.get('/api/health');
+  }
+
+  async sendTick<T>(input: { nodes: unknown[]; edges: unknown[]; tick: number; globalTrafficScale: number }): Promise<T> {
+    return this.post<T>('/api/v1/simulation/tick', input);
+  }
 }
 
 export const api = new ApiClient();

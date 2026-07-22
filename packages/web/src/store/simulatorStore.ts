@@ -6,6 +6,7 @@ import type { SimulatorNodeData, SimulationState, SimulationSpeed, ComponentConf
 import type { ComponentType } from '../types';
 import { COMPONENT_DEFINITIONS } from '../engine/models/ComponentModel';
 import { runSimulationTick } from '../engine/SimulationEngine';
+import { api } from '../api/client';
 
 function createDefaultMetrics(): NodeMetrics {
   return {
@@ -68,6 +69,8 @@ interface SimulatorStore {
   // Settings
   showMinimap: boolean;
   toggleMinimap: () => void;
+  backendConnected: boolean;
+  checkBackendHealth: () => Promise<void>;
 }
 
 const SPEED_INTERVALS: Record<SimulationSpeed, number> = {
@@ -234,31 +237,78 @@ export const useSimulatorStore = create<SimulatorStore>()(
     }));
   },
 
-  tick: () => {
+  backendConnected: false,
+  checkBackendHealth: async () => {
+    try {
+      await api.checkHealth();
+      set({ backendConnected: true });
+    } catch {
+      set({ backendConnected: false });
+    }
+  },
+
+  tick: async () => {
     const { nodes, edges, simulation } = get();
     if (nodes.length === 0) return;
 
     const newTick = simulation.tick + 1;
-    const { updatedMetrics, updatedEdgeMetrics, bottlenecks, totalRps } = runSimulationTick(nodes, edges, newTick, simulation.globalTrafficScale);
 
-    set((state) => ({
-      nodes: state.nodes.map((n) =>
-        updatedMetrics[n.id]
-          ? { ...n, data: { ...n.data, metrics: updatedMetrics[n.id] } }
-          : n
-      ),
-      edges: state.edges.map((e) =>
-        updatedEdgeMetrics[e.id]
-          ? { ...e, data: { ...(e.data || {}), metrics: updatedEdgeMetrics[e.id] } }
-          : e
-      ),
-      simulation: {
-        ...state.simulation,
+    try {
+      const res = await api.sendTick<{
+        updatedMetrics: Record<string, any>;
+        updatedEdgeMetrics: Record<string, any>;
+        bottlenecks: any[];
+        totalRps: number;
+      }>({
+        nodes: nodes.map((n) => ({ id: n.id, data: n.data })),
+        edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target, data: e.data })),
         tick: newTick,
-        totalRps,
-        bottlenecks,
-      },
-    }));
+        globalTrafficScale: simulation.globalTrafficScale ?? 100,
+      });
+
+      set((state) => ({
+        backendConnected: true,
+        nodes: state.nodes.map((n) =>
+          res.updatedMetrics[n.id]
+            ? { ...n, data: { ...n.data, metrics: res.updatedMetrics[n.id] } }
+            : n
+        ),
+        edges: state.edges.map((e) =>
+          res.updatedEdgeMetrics[e.id]
+            ? { ...e, data: { ...(e.data || {}), metrics: res.updatedEdgeMetrics[e.id] } }
+            : e
+        ),
+        simulation: {
+          ...state.simulation,
+          tick: newTick,
+          totalRps: res.totalRps,
+          bottlenecks: res.bottlenecks,
+        },
+      }));
+    } catch {
+      // Fallback gracioso para execucao local se a API estiver offline
+      const { updatedMetrics, updatedEdgeMetrics, bottlenecks, totalRps } = runSimulationTick(nodes, edges, newTick, simulation.globalTrafficScale);
+
+      set((state) => ({
+        backendConnected: false,
+        nodes: state.nodes.map((n) =>
+          updatedMetrics[n.id]
+            ? { ...n, data: { ...n.data, metrics: updatedMetrics[n.id] } }
+            : n
+        ),
+        edges: state.edges.map((e) =>
+          updatedEdgeMetrics[e.id]
+            ? { ...e, data: { ...(e.data || {}), metrics: updatedEdgeMetrics[e.id] } }
+            : e
+        ),
+        simulation: {
+          ...state.simulation,
+          tick: newTick,
+          totalRps,
+          bottlenecks,
+        },
+      }));
+    }
   },
 
   startSimulation: () => {
