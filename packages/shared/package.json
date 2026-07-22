@@ -14,6 +14,10 @@
   },
   "scripts": {
     "build": "echo 'shared package consumed as TS source'",
-    "lint": "echo 'no lint configured'"
+    "lint": "echo 'no lint configured'",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0"
   }
 }

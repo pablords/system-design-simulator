@@ -8,6 +8,7 @@
     "build": "tsup",
     "start": "node dist/index.js",
     "lint": "oxlint",
+    "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
@@ -31,6 +32,7 @@
     "oxlint": "^1",
     "tsup": "^8",
     "tsx": "^4",
-    "typescript": "~6.0.2"
+    "typescript": "~6.0.2",
+    "vitest": "^3.0.0"
   }
 }
