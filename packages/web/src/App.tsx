@@ -13,6 +13,7 @@ import { SaveIndicator } from './components/ui/SaveIndicator';
 import { useAuthStore } from './store/authStore';
 import { useProjectStore } from './store/projectStore';
 import { useAutoSave } from './hooks/useAutoSave';
+import { api } from './api/client';
 import type { Node, Edge } from '@xyflow/react';
 import type { SimulatorNodeData } from './types';
 
@@ -33,8 +34,14 @@ function App() {
   // Enable auto-save when authenticated and working on a project
   useAutoSave();
 
-  // Check auth on mount
+  // Check auth and capture URL OAuth token on mount
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (token) {
+      api.setToken(token);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
     checkAuth();
   }, [checkAuth]);
 
@@ -65,7 +72,6 @@ function App() {
   const handleOpenProject = useCallback(async (id: string) => {
     try {
       const project = await loadProject(id);
-      // Load the project canvas into the simulator store
       const store = useSimulatorStore.getState();
       store.pauseSimulation();
       useSimulatorStore.setState({

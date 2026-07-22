@@ -5,19 +5,28 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   JWT_EXPIRY: z.string().default('7d'),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
+  APP_FRONTEND_URL: z.string().default('http://localhost:5173'),
   PORT: z.coerce.number().default(3000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  GIT_CLIENT_ID: z.string().optional(),
+  GIT_CLIENT_SECRET: z.string().optional(),
+  GITHUB_CLIENT_ID: z.string().optional(),
+  GITHUB_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
 });
 
-export type Env = z.infer<typeof envSchema>;
+export type Env = z.infer<typeof envSchema> & {
+  githubClientId?: string;
+  githubClientSecret?: string;
+};
 
 function loadEnv(): Env {
-  // Load .env automatically if process.loadEnvFile is available (Node 20.6+)
   if (typeof process.loadEnvFile === 'function') {
     try {
       process.loadEnvFile('.env');
     } catch {
-      // Ignore if .env doesn't exist (e.g. production / container with env vars set)
+      // Ignore if .env doesn't exist
     }
   }
 
@@ -29,7 +38,17 @@ function loadEnv(): Env {
     process.exit(1);
   }
 
-  return result.data;
+  const data = result.data;
+  const githubClientId = data.GITHUB_CLIENT_ID || data.GIT_CLIENT_ID;
+  const githubClientSecret = data.GITHUB_CLIENT_SECRET || data.GIT_CLIENT_SECRET;
+
+  return {
+    ...data,
+    GITHUB_CLIENT_ID: githubClientId,
+    GITHUB_CLIENT_SECRET: githubClientSecret,
+    githubClientId,
+    githubClientSecret,
+  };
 }
 
 export const env = loadEnv();

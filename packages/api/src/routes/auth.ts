@@ -6,6 +6,7 @@ import { db } from '../db/index.js';
 import { schema } from '../db/index.js';
 import { signToken } from '../lib/jwt.js';
 import { authMiddleware, getUserId } from '../middleware/auth.js';
+import { env } from '../config/env.js';
 
 const SALT_ROUNDS = 12;
 
@@ -26,7 +27,6 @@ export const authRoutes = new Hono();
 authRoutes.post('/register', async (c) => {
   const body = registerSchema.parse(await c.req.json());
 
-  // Check if user already exists
   const existing = await db
     .select({ id: schema.users.id })
     .from(schema.users)
@@ -45,11 +45,14 @@ authRoutes.post('/register', async (c) => {
       email: body.email,
       passwordHash,
       name: body.name,
+      provider: 'email',
     })
     .returning({
       id: schema.users.id,
       email: schema.users.email,
       name: schema.users.name,
+      avatarUrl: schema.users.avatarUrl,
+      provider: schema.users.provider,
       createdAt: schema.users.createdAt,
     });
 
@@ -61,6 +64,8 @@ authRoutes.post('/register', async (c) => {
         id: user.id,
         email: user.email,
         name: user.name,
+        avatarUrl: user.avatarUrl,
+        provider: user.provider,
         createdAt: user.createdAt.toISOString(),
       },
       token,
@@ -79,7 +84,7 @@ authRoutes.post('/login', async (c) => {
     .where(eq(schema.users.email, body.email))
     .limit(1);
 
-  if (!user) {
+  if (!user || !user.passwordHash) {
     return c.json({ error: 'Unauthorized', message: 'Invalid credentials', statusCode: 401 }, 401);
   }
 
@@ -96,6 +101,8 @@ authRoutes.post('/login', async (c) => {
       id: user.id,
       email: user.email,
       name: user.name,
+      avatarUrl: user.avatarUrl,
+      provider: user.provider,
       createdAt: user.createdAt.toISOString(),
     },
     token,
@@ -111,6 +118,8 @@ authRoutes.get('/me', authMiddleware, async (c) => {
       id: schema.users.id,
       email: schema.users.email,
       name: schema.users.name,
+      avatarUrl: schema.users.avatarUrl,
+      provider: schema.users.provider,
       createdAt: schema.users.createdAt,
     })
     .from(schema.users)
@@ -125,6 +134,8 @@ authRoutes.get('/me', authMiddleware, async (c) => {
     id: user.id,
     email: user.email,
     name: user.name,
+    avatarUrl: user.avatarUrl,
+    provider: user.provider,
     createdAt: user.createdAt.toISOString(),
   });
 });
@@ -132,4 +143,185 @@ authRoutes.get('/me', authMiddleware, async (c) => {
 // POST /logout (stateless JWT — just acknowledge)
 authRoutes.post('/logout', async (c) => {
   return c.json({ message: 'Logged out successfully' });
+});
+
+// --- OAUTH PROVIDERS ---
+
+// GET /github — Redirect to GitHub OAuth Authorization
+authRoutes.get('/github', (c) => {
+  if (!env.GITHUB_CLIENT_ID) {
+    return c.json({ error: 'NotConfigured', message: 'GITHUB_CLIENT_ID is not configured in API environment', statusCode: 500 }, 500);
+  }
+  const redirectUri = `${env.CORS_ORIGIN}/api/v1/auth/github/callback`;
+  const url = `https://github.com/login/oauth/authorize?client_id=${env.GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user:email`;
+  return c.redirect(url);
+});
+
+// GET /github/callback
+authRoutes.get('/github/callback', async (c) => {
+  const code = c.req.query('code');
+  if (!code) {
+    return c.redirect(`${env.APP_FRONTEND_URL}/?error=MissingCode`);
+  }
+
+  try {
+    // 1. Exchange code for access_token
+    const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        client_id: env.GITHUB_CLIENT_ID,
+        client_secret: env.GITHUB_CLIENT_SECRET,
+        code,
+      }),
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) {
+      return c.redirect(`${env.APP_FRONTEND_URL}/?error=GitHubAuthFailed`);
+    }
+
+    // 2. Fetch GitHub User Profile
+    const userRes = await fetch('https://api.github.com/user', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}`, 'User-Agent': 'System-Design-Simulator' },
+    });
+    const ghUser = await userRes.json();
+
+    // 3. Fetch primary email if missing
+    let email = ghUser.email;
+    if (!email) {
+      const emailRes = await fetch('https://api.github.com/user/emails', {
+        headers: { Authorization: `Bearer ${tokenData.access_token}`, 'User-Agent': 'System-Design-Simulator' },
+      });
+      const emails = await emailRes.json();
+      if (Array.isArray(emails)) {
+        const primary = emails.find((e: any) => e.primary) || emails[0];
+        email = primary?.email;
+      }
+    }
+
+    if (!email) {
+      return c.redirect(`${env.APP_FRONTEND_URL}/?error=NoEmailFromGitHub`);
+    }
+
+    // 4. Upsert user in database
+    const existing = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
+
+    let userId: string;
+    if (existing.length > 0) {
+      userId = existing[0].id;
+      await db
+        .update(schema.users)
+        .set({
+          avatarUrl: ghUser.avatar_url || existing[0].avatarUrl,
+          provider: 'github',
+          providerId: String(ghUser.id),
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.users.id, userId));
+    } else {
+      const [inserted] = await db
+        .insert(schema.users)
+        .values({
+          email,
+          name: ghUser.name || ghUser.login || 'GitHub User',
+          avatarUrl: ghUser.avatar_url || null,
+          provider: 'github',
+          providerId: String(ghUser.id),
+        })
+        .returning({ id: schema.users.id });
+      userId = inserted.id;
+    }
+
+    // 5. Sign JWT and redirect to frontend
+    const token = await signToken(userId);
+    return c.redirect(`${env.APP_FRONTEND_URL}/?token=${token}`);
+  } catch (err) {
+    console.error('GitHub OAuth Callback Error:', err);
+    return c.redirect(`${env.APP_FRONTEND_URL}/?error=OAuthServerError`);
+  }
+});
+
+// GET /google — Redirect to Google OAuth Authorization
+authRoutes.get('/google', (c) => {
+  if (!env.GOOGLE_CLIENT_ID) {
+    return c.json({ error: 'NotConfigured', message: 'GOOGLE_CLIENT_ID is not configured in API environment', statusCode: 500 }, 500);
+  }
+  const redirectUri = `${env.CORS_ORIGIN}/api/v1/auth/google/callback`;
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${env.GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=openid%20email%20profile`;
+  return c.redirect(url);
+});
+
+// GET /google/callback
+authRoutes.get('/google/callback', async (c) => {
+  const code = c.req.query('code');
+  if (!code) {
+    return c.redirect(`${env.APP_FRONTEND_URL}/?error=MissingCode`);
+  }
+
+  try {
+    const redirectUri = `${env.CORS_ORIGIN}/api/v1/auth/google/callback`;
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: env.GOOGLE_CLIENT_ID!,
+        client_secret: env.GOOGLE_CLIENT_SECRET!,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      }),
+    });
+
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) {
+      return c.redirect(`${env.APP_FRONTEND_URL}/?error=GoogleAuthFailed`);
+    }
+
+    // Fetch Google profile
+    const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    const gUser = await userRes.json();
+
+    if (!gUser.email) {
+      return c.redirect(`${env.APP_FRONTEND_URL}/?error=NoEmailFromGoogle`);
+    }
+
+    const existing = await db.select().from(schema.users).where(eq(schema.users.email, gUser.email)).limit(1);
+
+    let userId: string;
+    if (existing.length > 0) {
+      userId = existing[0].id;
+      await db
+        .update(schema.users)
+        .set({
+          avatarUrl: gUser.picture || existing[0].avatarUrl,
+          provider: 'google',
+          providerId: String(gUser.id),
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.users.id, userId));
+    } else {
+      const [inserted] = await db
+        .insert(schema.users)
+        .values({
+          email: gUser.email,
+          name: gUser.name || 'Google User',
+          avatarUrl: gUser.picture || null,
+          provider: 'google',
+          providerId: String(gUser.id),
+        })
+        .returning({ id: schema.users.id });
+      userId = inserted.id;
+    }
+
+    const token = await signToken(userId);
+    return c.redirect(`${env.APP_FRONTEND_URL}/?token=${token}`);
+  } catch (err) {
+    console.error('Google OAuth Callback Error:', err);
+    return c.redirect(`${env.APP_FRONTEND_URL}/?error=OAuthServerError`);
+  }
 });

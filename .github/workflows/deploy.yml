@@ -32,6 +32,14 @@ jobs:
 
       - name: Build all packages
         run: npx turbo build
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          GIT_CLIENT_ID: ${{ secrets.GIT_CLIENT_ID }}
+          GIT_CLIENT_SECRET: ${{ secrets.GIT_CLIENT_SECRET }}
+          GITHUB_CLIENT_ID: ${{ secrets.GIT_CLIENT_ID || secrets.GITHUB_CLIENT_ID }}
+          GITHUB_CLIENT_SECRET: ${{ secrets.GIT_CLIENT_SECRET || secrets.GITHUB_CLIENT_SECRET }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
 
       # Deploy frontend to GitHub Pages
       - name: Upload Pages artifact
@@ -65,7 +73,18 @@ jobs:
       - name: Install Railway CLI
         run: npm i -g @railway/cli
 
-      - name: Deploy API
-        run: railway up --service api
+      - name: Set Railway Environment Variables & Deploy
+        run: |
+          if [ -n "${{ secrets.GIT_CLIENT_ID }}" ]; then
+            railway vars set \
+              GIT_CLIENT_ID="${{ secrets.GIT_CLIENT_ID }}" \
+              GIT_CLIENT_SECRET="${{ secrets.GIT_CLIENT_SECRET }}" \
+              GITHUB_CLIENT_ID="${{ secrets.GIT_CLIENT_ID }}" \
+              GITHUB_CLIENT_SECRET="${{ secrets.GIT_CLIENT_SECRET }}" \
+              GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
+              GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+              --service api || true
+          fi
+          railway up --service api
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
