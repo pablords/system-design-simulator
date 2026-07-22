@@ -63,6 +63,8 @@ jobs:
     name: Deploy API to Railway
     needs: build
     runs-on: ubuntu-latest
+    environment:
+      name: system-design-simulator
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout
