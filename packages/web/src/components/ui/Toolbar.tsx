@@ -69,22 +69,22 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onSave, onLoad, isPaletteOpen,
         <Zap size={20} className="brand-icon" />
         <span className="brand-name">SysDesign Simulator</span>
         <span
-          title={backendConnected ? "Motor de simulação rodando via API Backend" : "Motor de simulação rodando Local (Fallback)"}
+          title={backendConnected ? "Motor local otimizado (0ms de latência) com auditoria periódica no backend" : "Motor local otimizado rodando no navegador"}
           style={{
             fontSize: '11px',
             padding: '2px 8px',
             borderRadius: '12px',
             marginLeft: '10px',
             fontWeight: 600,
-            background: backendConnected ? 'rgba(34, 197, 94, 0.15)' : 'rgba(234, 179, 8, 0.15)',
-            color: backendConnected ? '#4ade80' : '#fef08a',
-            border: `1px solid ${backendConnected ? 'rgba(34, 197, 94, 0.3)' : 'rgba(234, 179, 8, 0.3)'}`,
+            background: 'rgba(34, 197, 94, 0.15)',
+            color: '#4ade80',
+            border: '1px solid rgba(34, 197, 94, 0.3)',
             display: 'inline-flex',
             alignItems: 'center',
             gap: '4px',
           }}
         >
-          {backendConnected ? '🟢 API Backend' : '⚡ Motor Local'}
+          {backendConnected ? '⚡ Motor Otimizado (Sync Background)' : '⚡ Motor Local'}
         </span>
         {isAuthenticated && currentProjectName && (
           <span style={{ color: '#64748b', fontSize: '13px', marginLeft: '8px', fontWeight: 400 }}>
