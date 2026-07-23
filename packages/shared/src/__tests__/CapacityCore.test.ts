@@ -64,4 +64,43 @@ describe('CapacityCore - calculateCapacity', () => {
     expect(result.recommendedReplicas).toBe(44);
     expect(result.recommendedCacheRamGb).toBeGreaterThan(0);
   });
+
+  it('should sanitize NaN and negative input metrics gracefully without returning NaN or negative numbers', () => {
+    const invalidInput = {
+      dau: NaN,
+      targetLatencyMs: -100,
+      peakRps: -50,
+      dailyStorageGb: NaN,
+      readRatio: NaN,
+      writeRatio: -0.5,
+      avgReadPayloadKb: -10,
+      avgWritePayloadKb: NaN,
+      retentionDays: -30,
+    };
+
+    const result = calculateCapacity(invalidInput);
+
+    expect(Number.isNaN(result.meanRps)).toBe(false);
+    expect(Number.isNaN(result.peakRps)).toBe(false);
+    expect(Number.isNaN(result.dailyStorageGb)).toBe(false);
+    expect(Number.isNaN(result.totalStorageGb)).toBe(false);
+    expect(Number.isNaN(result.readBandwidthMbps)).toBe(false);
+    expect(Number.isNaN(result.writeBandwidthMbps)).toBe(false);
+    expect(Number.isNaN(result.totalBandwidthMbps)).toBe(false);
+    expect(Number.isNaN(result.recommendedCacheRamGb)).toBe(false);
+    expect(Number.isNaN(result.recommendedReplicas)).toBe(false);
+
+    expect(result.meanRps).toBeGreaterThanOrEqual(0);
+    expect(result.peakRps).toBeGreaterThanOrEqual(0);
+    expect(result.dailyStorageGb).toBeGreaterThanOrEqual(0);
+    expect(result.totalStorageGb).toBeGreaterThanOrEqual(0);
+    expect(result.readBandwidthMbps).toBeGreaterThanOrEqual(0);
+    expect(result.writeBandwidthMbps).toBeGreaterThanOrEqual(0);
+    expect(result.totalBandwidthMbps).toBeGreaterThanOrEqual(0);
+    expect(result.recommendedCacheRamGb).toBeGreaterThanOrEqual(0);
+    expect(result.recommendedReplicas).toBeGreaterThanOrEqual(1);
+
+    const parsed = CapacityResultSchema.safeParse(result);
+    expect(parsed.success).toBe(true);
+  });
 });

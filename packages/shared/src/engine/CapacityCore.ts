@@ -6,6 +6,9 @@ export interface CapacityInput {
   avgWritePayloadKb?: number;
   retentionDays?: number;
   targetLatencyMs?: number;
+  latencyMs?: number;
+  peakRps?: number;
+  dailyStorageGb?: number;
 }
 
 export interface CapacityResult {
@@ -20,24 +23,47 @@ export interface CapacityResult {
   recommendedReplicas: number;
 }
 
-export function calculateCapacity(input: CapacityInput): CapacityResult {
-  const dau = input.dau ?? 100000;
-  const readRatio = input.readRatio ?? 0.8;
-  const writeRatio = input.writeRatio ?? 0.2;
-  const readSizeKb = input.avgReadPayloadKb ?? 10;
-  const writeSizeKb = input.avgWritePayloadKb ?? 50;
-  const days = input.retentionDays ?? 30;
-  const latencyMs = input.targetLatencyMs ?? 50;
+function sanitizeInputMetric(val: unknown, defaultValue: number, min = 0): number {
+  if (val === undefined || val === null || typeof val !== 'number' || Number.isNaN(val) || !Number.isFinite(val)) {
+    return defaultValue;
+  }
+  return Math.max(min, val);
+}
+
+function sanitizeOutputMetric(val: number, min = 0): number {
+  if (Number.isNaN(val) || !Number.isFinite(val)) {
+    return min;
+  }
+  return Math.max(min, val);
+}
+
+export function calculateCapacity(input: CapacityInput = {}): CapacityResult {
+  const safeInput = input || {};
+
+  const dau = sanitizeInputMetric(safeInput.dau, 100000, 0);
+  const readRatio = sanitizeInputMetric(safeInput.readRatio, 0.8, 0);
+  const writeRatio = sanitizeInputMetric(safeInput.writeRatio, 0.2, 0);
+  const readSizeKb = sanitizeInputMetric(safeInput.avgReadPayloadKb, 10, 0);
+  const writeSizeKb = sanitizeInputMetric(safeInput.avgWritePayloadKb, 50, 0);
+  const days = sanitizeInputMetric(safeInput.retentionDays, 30, 0);
+  const latencyMs = sanitizeInputMetric(safeInput.targetLatencyMs ?? safeInput.latencyMs, 50, 0);
 
   const totalOpsPerDay = dau * 10;
   const meanRps = totalOpsPerDay / 86400;
-  const peakRps = meanRps * 3;
+  const computedPeakRps = meanRps * 3;
+  const peakRps = safeInput.peakRps !== undefined
+    ? sanitizeInputMetric(safeInput.peakRps, computedPeakRps, 0)
+    : computedPeakRps;
 
   const writeOpsPerSec = meanRps * writeRatio;
   const readOpsPerSec = meanRps * readRatio;
 
   const dailyStorageBytes = writeOpsPerSec * 86400 * writeSizeKb * 1024;
-  const dailyStorageGb = dailyStorageBytes / (1024 * 1024 * 1024);
+  const computedDailyStorageGb = dailyStorageBytes / (1024 * 1024 * 1024);
+  const dailyStorageGb = safeInput.dailyStorageGb !== undefined
+    ? sanitizeInputMetric(safeInput.dailyStorageGb, computedDailyStorageGb, 0)
+    : computedDailyStorageGb;
+
   const totalStorageGb = dailyStorageGb * days;
 
   const readBandwidthMbps = (readOpsPerSec * readSizeKb * 8) / 1024;
@@ -52,14 +78,14 @@ export function calculateCapacity(input: CapacityInput): CapacityResult {
   const recommendedReplicas = Math.max(1, Math.ceil(concurrentReqs / 200));
 
   return {
-    meanRps: Math.round(meanRps * 100) / 100,
-    peakRps: Math.round(peakRps * 100) / 100,
-    dailyStorageGb: Math.round(dailyStorageGb * 100) / 100,
-    totalStorageGb: Math.round(totalStorageGb * 100) / 100,
-    readBandwidthMbps: Math.round(readBandwidthMbps * 100) / 100,
-    writeBandwidthMbps: Math.round(writeBandwidthMbps * 100) / 100,
-    totalBandwidthMbps: Math.round(totalBandwidthMbps * 100) / 100,
-    recommendedCacheRamGb,
-    recommendedReplicas,
+    meanRps: sanitizeOutputMetric(Math.round(meanRps * 100) / 100, 0),
+    peakRps: sanitizeOutputMetric(Math.round(peakRps * 100) / 100, 0),
+    dailyStorageGb: sanitizeOutputMetric(Math.round(dailyStorageGb * 100) / 100, 0),
+    totalStorageGb: sanitizeOutputMetric(Math.round(totalStorageGb * 100) / 100, 0),
+    readBandwidthMbps: sanitizeOutputMetric(Math.round(readBandwidthMbps * 100) / 100, 0),
+    writeBandwidthMbps: sanitizeOutputMetric(Math.round(writeBandwidthMbps * 100) / 100, 0),
+    totalBandwidthMbps: sanitizeOutputMetric(Math.round(totalBandwidthMbps * 100) / 100, 0),
+    recommendedCacheRamGb: sanitizeOutputMetric(recommendedCacheRamGb, 0),
+    recommendedReplicas: sanitizeOutputMetric(recommendedReplicas, 1),
   };
 }

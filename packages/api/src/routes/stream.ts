@@ -13,11 +13,17 @@ streamRoutes.get('/stream', (c) => {
       console.log('⚡ SSE Stream closed by client');
     });
 
-    await stream.writeSSE({
-      data: JSON.stringify({ message: 'Connected to simulation tick stream engine', timestamp: new Date().toISOString() }),
-      event: 'connected',
-      id: '1',
-    });
+    try {
+      await stream.writeSSE({
+        data: JSON.stringify({ message: 'Connected to simulation tick stream engine', timestamp: new Date().toISOString() }),
+        event: 'connected',
+        id: '1',
+      });
+    } catch (err) {
+      isAborted = true;
+      console.error('⚡ SSE Stream initial write error:', err);
+      return;
+    }
 
     let tick = 1;
     const sampleNodes = [
@@ -59,21 +65,32 @@ streamRoutes.get('/stream', (c) => {
         globalTrafficScale: 100 + Math.sin(tick / 5) * 20,
       });
 
-      await stream.writeSSE({
-        data: JSON.stringify({
-          tick,
-          timestamp: new Date().toISOString(),
-          totalRps: tickResult.totalRps,
-          updatedMetrics: tickResult.updatedMetrics,
-          updatedEdgeMetrics: tickResult.updatedEdgeMetrics,
-          bottlenecks: tickResult.bottlenecks,
-        }),
-        event: 'tick',
-        id: String(tick + 1),
-      });
+      try {
+        await stream.writeSSE({
+          data: JSON.stringify({
+            tick,
+            timestamp: new Date().toISOString(),
+            totalRps: tickResult.totalRps,
+            updatedMetrics: tickResult.updatedMetrics,
+            updatedEdgeMetrics: tickResult.updatedEdgeMetrics,
+            bottlenecks: tickResult.bottlenecks,
+          }),
+          event: 'tick',
+          id: String(tick + 1),
+        });
+      } catch (err) {
+        isAborted = true;
+        console.error('⚡ SSE Stream write error on socket teardown:', err);
+        break;
+      }
 
       tick++;
-      await stream.sleep(process.env.NODE_ENV === 'test' ? 50 : 1000);
+      try {
+        await stream.sleep(process.env.NODE_ENV === 'test' ? 50 : 1000);
+      } catch (err) {
+        isAborted = true;
+        break;
+      }
     }
   });
 });
