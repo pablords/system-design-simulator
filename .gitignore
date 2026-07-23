@@ -32,3 +32,15 @@ plans
 .env
 .env.*
 !.env.example
+coverage
+teamwork_*
+explorer_*
+orchestrator*
+sentinel
+auditor*
+reviewer_*
+challenger_*
+worker_*
+victory_*
+ORIGINAL_REQUEST.md
+sub_*

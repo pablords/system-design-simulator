@@ -1,8 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { eq, and, or, desc } from 'drizzle-orm';
-import { db } from '../db/index.js';
-import { schema } from '../db/index.js';
+import { DrizzleProjectRepository, type IProjectRepository } from '../repositories/project.repository.js';
 import { authMiddleware, getUserId } from '../middleware/auth.js';
 
 const createProjectSchema = z.object({
@@ -11,11 +9,13 @@ const createProjectSchema = z.object({
   canvas: z.object({
     nodes: z.array(z.unknown()),
     edges: z.array(z.unknown()),
-    viewport: z.object({
-      x: z.number(),
-      y: z.number(),
-      zoom: z.number(),
-    }).optional(),
+    viewport: z
+      .object({
+        x: z.number(),
+        y: z.number(),
+        zoom: z.number(),
+      })
+      .optional(),
   }),
   isPublic: z.boolean().optional().default(false),
 });
@@ -23,197 +23,161 @@ const createProjectSchema = z.object({
 const updateProjectSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(1000).nullable().optional(),
-  canvas: z.object({
-    nodes: z.array(z.unknown()),
-    edges: z.array(z.unknown()),
-    viewport: z.object({
-      x: z.number(),
-      y: z.number(),
-      zoom: z.number(),
-    }).optional(),
-  }).optional(),
+  canvas: z
+    .object({
+      nodes: z.array(z.unknown()),
+      edges: z.array(z.unknown()),
+      viewport: z
+        .object({
+          x: z.number(),
+          y: z.number(),
+          zoom: z.number(),
+        })
+        .optional(),
+    })
+    .optional(),
   thumbnail: z.string().nullable().optional(),
   isPublic: z.boolean().optional(),
 });
 
-export const projectRoutes = new Hono();
+function formatDate(dateVal: Date | string): string {
+  if (dateVal instanceof Date) {
+    return dateVal.toISOString();
+  }
+  return new Date(dateVal).toISOString();
+}
 
-// All routes require authentication
-projectRoutes.use('/*', authMiddleware);
+export function createProjectRoutes(customProjectRepo?: IProjectRepository) {
+  const projectRepo = customProjectRepo || new DrizzleProjectRepository();
+  const projectRoutes = new Hono();
 
-// GET / — list user projects
-projectRoutes.get('/', async (c) => {
-  const userId = getUserId(c);
+  // All routes require authentication
+  projectRoutes.use('/*', authMiddleware);
 
-  const userProjects = await db
-    .select({
-      id: schema.projects.id,
-      name: schema.projects.name,
-      description: schema.projects.description,
-      thumbnail: schema.projects.thumbnail,
-      isPublic: schema.projects.isPublic,
-      createdAt: schema.projects.createdAt,
-      updatedAt: schema.projects.updatedAt,
-    })
-    .from(schema.projects)
-    .where(eq(schema.projects.userId, userId))
-    .orderBy(desc(schema.projects.updatedAt));
+  // GET / — list user projects
+  projectRoutes.get('/', async (c) => {
+    const userId = getUserId(c);
+    const userProjects = await projectRepo.findByUserId(userId);
 
-  return c.json(
-    userProjects.map((p) => ({
-      ...p,
-      createdAt: p.createdAt.toISOString(),
-      updatedAt: p.updatedAt.toISOString(),
-    }))
-  );
-});
+    return c.json(
+      userProjects.map((p) => ({
+        ...p,
+        createdAt: formatDate(p.createdAt),
+        updatedAt: formatDate(p.updatedAt),
+      }))
+    );
+  });
 
-// POST / — create project
-projectRoutes.post('/', async (c) => {
-  const userId = getUserId(c);
-  const body = createProjectSchema.parse(await c.req.json());
+  // POST / — create project
+  projectRoutes.post('/', async (c) => {
+    const userId = getUserId(c);
+    const body = createProjectSchema.parse(await c.req.json());
 
-  const [project] = await db
-    .insert(schema.projects)
-    .values({
+    const project = await projectRepo.create({
       userId,
       name: body.name,
       description: body.description ?? null,
       canvas: body.canvas,
       isPublic: body.isPublic,
-    })
-    .returning();
+    });
 
-  return c.json(
-    {
+    return c.json(
+      {
+        ...project,
+        createdAt: formatDate(project.createdAt),
+        updatedAt: formatDate(project.updatedAt),
+      },
+      201
+    );
+  });
+
+  // GET /:id — get project (owner or public)
+  projectRoutes.get('/:id', async (c) => {
+    const userId = getUserId(c);
+    const projectId = c.req.param('id');
+
+    const project = await projectRepo.findById(projectId);
+
+    if (!project || (project.userId !== userId && !project.isPublic)) {
+      return c.json({ error: 'NotFound', message: 'Project not found', statusCode: 404 }, 404);
+    }
+
+    return c.json({
       ...project,
-      createdAt: project.createdAt.toISOString(),
-      updatedAt: project.updatedAt.toISOString(),
-    },
-    201
-  );
-});
-
-// GET /:id — get project (owner or public)
-projectRoutes.get('/:id', async (c) => {
-  const userId = getUserId(c);
-  const projectId = c.req.param('id');
-
-  const [project] = await db
-    .select()
-    .from(schema.projects)
-    .where(
-      and(
-        eq(schema.projects.id, projectId),
-        or(
-          eq(schema.projects.userId, userId),
-          eq(schema.projects.isPublic, true)
-        )
-      )
-    )
-    .limit(1);
-
-  if (!project) {
-    return c.json({ error: 'NotFound', message: 'Project not found', statusCode: 404 }, 404);
-  }
-
-  return c.json({
-    ...project,
-    createdAt: project.createdAt.toISOString(),
-    updatedAt: project.updatedAt.toISOString(),
+      createdAt: formatDate(project.createdAt),
+      updatedAt: formatDate(project.updatedAt),
+    });
   });
-});
 
-// PUT /:id — update project (owner only)
-projectRoutes.put('/:id', async (c) => {
-  const userId = getUserId(c);
-  const projectId = c.req.param('id');
-  const body = updateProjectSchema.parse(await c.req.json());
+  // PUT /:id — update project (owner only)
+  projectRoutes.put('/:id', async (c) => {
+    const userId = getUserId(c);
+    const projectId = c.req.param('id');
+    const body = updateProjectSchema.parse(await c.req.json());
 
-  // Verify ownership
-  const [existing] = await db
-    .select({ id: schema.projects.id })
-    .from(schema.projects)
-    .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, userId)))
-    .limit(1);
+    const existing = await projectRepo.findById(projectId);
 
-  if (!existing) {
-    return c.json({ error: 'NotFound', message: 'Project not found', statusCode: 404 }, 404);
-  }
+    if (!existing || existing.userId !== userId) {
+      return c.json({ error: 'NotFound', message: 'Project not found', statusCode: 404 }, 404);
+    }
 
-  const [updated] = await db
-    .update(schema.projects)
-    .set({
-      ...body,
-      updatedAt: new Date(),
-    })
-    .where(eq(schema.projects.id, projectId))
-    .returning();
+    const updated = await projectRepo.update(projectId, body);
 
-  return c.json({
-    ...updated,
-    createdAt: updated.createdAt.toISOString(),
-    updatedAt: updated.updatedAt.toISOString(),
+    if (!updated) {
+      return c.json({ error: 'NotFound', message: 'Project not found', statusCode: 404 }, 404);
+    }
+
+    return c.json({
+      ...updated,
+      createdAt: formatDate(updated.createdAt),
+      updatedAt: formatDate(updated.updatedAt),
+    });
   });
-});
 
-// DELETE /:id — delete project (owner only)
-projectRoutes.delete('/:id', async (c) => {
-  const userId = getUserId(c);
-  const projectId = c.req.param('id');
+  // DELETE /:id — delete project (owner only)
+  projectRoutes.delete('/:id', async (c) => {
+    const userId = getUserId(c);
+    const projectId = c.req.param('id');
 
-  const [deleted] = await db
-    .delete(schema.projects)
-    .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, userId)))
-    .returning({ id: schema.projects.id });
+    const deleted = await projectRepo.delete(projectId, userId);
 
-  if (!deleted) {
-    return c.json({ error: 'NotFound', message: 'Project not found', statusCode: 404 }, 404);
-  }
+    if (!deleted) {
+      return c.json({ error: 'NotFound', message: 'Project not found', statusCode: 404 }, 404);
+    }
 
-  return c.json({ message: 'Project deleted successfully' });
-});
+    return c.json({ message: 'Project deleted successfully' });
+  });
 
-// POST /:id/clone — clone project (owner or public)
-projectRoutes.post('/:id/clone', async (c) => {
-  const userId = getUserId(c);
-  const projectId = c.req.param('id');
+  // POST /:id/clone — clone project (owner or public)
+  projectRoutes.post('/:id/clone', async (c) => {
+    const userId = getUserId(c);
+    const projectId = c.req.param('id');
 
-  const [source] = await db
-    .select()
-    .from(schema.projects)
-    .where(
-      and(
-        eq(schema.projects.id, projectId),
-        or(
-          eq(schema.projects.userId, userId),
-          eq(schema.projects.isPublic, true)
-        )
-      )
-    )
-    .limit(1);
+    const source = await projectRepo.findById(projectId);
 
-  if (!source) {
-    return c.json({ error: 'NotFound', message: 'Project not found', statusCode: 404 }, 404);
-  }
+    if (!source || (source.userId !== userId && !source.isPublic)) {
+      return c.json({ error: 'NotFound', message: 'Project not found', statusCode: 404 }, 404);
+    }
 
-  const [cloned] = await db
-    .insert(schema.projects)
-    .values({
+    const cloned = await projectRepo.create({
       userId,
       name: `${source.name} (copy)`,
       description: source.description,
       canvas: source.canvas,
       isPublic: false,
-    })
-    .returning();
+    });
 
-  return c.json(
-    {
-      ...cloned,
-      createdAt: cloned.createdAt.toISOString(),
-      updatedAt: cloned.updatedAt.toISOString(),
-    },
-    201
-  );
-});
+    return c.json(
+      {
+        ...cloned,
+        createdAt: formatDate(cloned.createdAt),
+        updatedAt: formatDate(cloned.updatedAt),
+      },
+      201
+    );
+  });
+
+  return projectRoutes;
+}
+
+export const projectRoutes = createProjectRoutes();

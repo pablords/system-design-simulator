@@ -29,7 +29,8 @@ export const useAuthStore = create<AuthState>()((set) => ({
       set({ user: res.user, isAuthenticated: true, isLoading: false });
     } catch (err: unknown) {
       const e = err as Error & { body?: { message?: string } };
-      set({ error: e.body?.message || e.message || 'Login failed', isLoading: false });
+      api.setToken(null);
+      set({ user: null, isAuthenticated: false, error: e.body?.message || e.message || 'Login failed', isLoading: false });
       throw err;
     }
   },
@@ -42,7 +43,8 @@ export const useAuthStore = create<AuthState>()((set) => ({
       set({ user: res.user, isAuthenticated: true, isLoading: false });
     } catch (err: unknown) {
       const e = err as Error & { body?: { message?: string } };
-      set({ error: e.body?.message || e.message || 'Registration failed', isLoading: false });
+      api.setToken(null);
+      set({ user: null, isAuthenticated: false, error: e.body?.message || e.message || 'Registration failed', isLoading: false });
       throw err;
     }
   },

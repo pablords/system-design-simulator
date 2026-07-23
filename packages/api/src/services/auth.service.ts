@@ -2,7 +2,11 @@ import bcrypt from 'bcrypt';
 import type { IUserRepository, UserEntity } from '../repositories/user.repository.js';
 
 export class AuthService {
-  constructor(private userRepo: IUserRepository) {}
+  private userRepo: IUserRepository;
+
+  constructor(userRepo: IUserRepository) {
+    this.userRepo = userRepo;
+  }
 
   async register(email: string, passwordHash: string, name: string): Promise<UserEntity> {
     const existing = await this.userRepo.findByEmail(email);

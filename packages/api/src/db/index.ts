@@ -1,11 +1,13 @@
 import { neon } from '@neondatabase/serverless';
-import { drizzle as drizzleNeon } from 'drizzle-orm/neon-http';
-import { drizzle as drizzlePostgres } from 'drizzle-orm/postgres-js';
+import { drizzle as drizzleNeon, type NeonHttpDatabase } from 'drizzle-orm/neon-http';
+import { drizzle as drizzlePostgres, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { env } from '../config/env.js';
 import * as schema from './schema.js';
 
-function createDbClient() {
+export type ApiDatabase = NeonHttpDatabase<typeof schema> | PostgresJsDatabase<typeof schema>;
+
+function createDbClient(): ApiDatabase {
   const url = env.DATABASE_URL;
   if (url.includes('neon.tech') || url.includes('sslmode=require')) {
     const sql = neon(url);
@@ -16,7 +18,7 @@ function createDbClient() {
   }
 }
 
-export const db = createDbClient() as any;
+export const db: ApiDatabase = createDbClient();
 export { schema };
 
 export async function initDb() {

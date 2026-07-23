@@ -49,4 +49,23 @@ describe('AuthService Unit Tests (TDD + DIP)', () => {
     expect(user.providerId).toBe('123456');
     expect(user.email).toBe('dev@github.com');
   });
+
+  it('should return existing user when social login provider and providerId match', async () => {
+    const u1 = await authService.handleSocialLogin('github', '123', 'a@test.com', 'A', 'img');
+    const u2 = await authService.handleSocialLogin('github', '123', 'a@test.com', 'A', 'img');
+    expect(u1.id).toBe(u2.id);
+  });
+
+  it('should link provider when user exists by email', async () => {
+    await authService.register('existing@email.com', 'password', 'Existing');
+    const linked = await authService.handleSocialLogin(
+      'google',
+      'g_456',
+      'existing@email.com',
+      'Existing',
+      'google_pic'
+    );
+    expect(linked.provider).toBe('google');
+    expect(linked.providerId).toBe('g_456');
+  });
 });
