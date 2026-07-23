@@ -1,0 +1,10 @@
+{
+  "context": {
+    "rules": [
+      "./.agents/rules/architecture.md"
+    ]
+  },
+  "agents_dir": "./.agents/agents",
+  "skills_dir": "./.agents/skills",
+  "default_agent": "tech_lead" 
+}
