@@ -322,6 +322,89 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
     edgeTimeoutsMap[edge.id] = 0;
   }
 
+  function getActiveReplicas(nodeId: string): number {
+    const node = nodeMap.get(nodeId);
+    if (!node) return 1;
+    const cfg = node.data.config;
+    const prevMetrics = node.data.metrics;
+    const isComputeNode = node.data.componentType === 'app-server' || node.data.componentType === 'worker';
+    let activeReplicas = prevMetrics?.activeReplicas ?? cfg.replicas ?? 1;
+
+    if (cfg.autoscalingEnabled && isComputeNode) {
+      const maxRep = cfg.maxReplicas ?? 10;
+      const minRep = cfg.replicas ?? 1;
+      const prevUtil = prevMetrics ? prevMetrics.inboundRps / ((cfg.maxRps ?? 500) * activeReplicas) : 0;
+
+      if (prevUtil > 0.8 && activeReplicas < maxRep) {
+        activeReplicas += 1;
+      } else if (prevUtil < 0.3 && activeReplicas > minRep) {
+        activeReplicas -= 1;
+      }
+    } else {
+      activeReplicas = cfg.replicas ?? 1;
+    }
+    return activeReplicas;
+  }
+
+  function estimateNodeLatency(nodeId: string): number {
+    const node = nodeMap.get(nodeId);
+    if (!node) return 0;
+    const def = COMPONENT_DEFINITIONS[node.data.componentType as keyof typeof COMPONENT_DEFINITIONS];
+    if (!def) return 0;
+    const cfg = node.data.config;
+    const inbound = inboundRpsMap[node.id] ?? 0;
+    const effectiveMaxRps = (cfg.maxRps ?? 0) * (cfg.replicas ?? 1);
+    const utilization = effectiveMaxRps > 0 ? clamp(inbound / effectiveMaxRps, 0, 2) : 0;
+    const overloadFactor = utilization > 1 ? (utilization - 1) * 5 : 0;
+    return def.baseLatencyMs * (1 + overloadFactor * 3);
+  }
+
+  // Apply Bulkhead limit on connection links (edges)
+  for (const edge of edges) {
+    const bulkheadLimit = edge.data?.bulkheadLimit;
+    if (edge.data?.bulkheadEnabled && bulkheadLimit !== undefined && bulkheadLimit > 0) {
+      const sourceActiveReplicas = getActiveReplicas(edge.source);
+      const effectiveBulkhead = bulkheadLimit * sourceActiveReplicas;
+
+      const edgeRps = edgeRpsMap[edge.id] ?? 0;
+      const targetLatency = estimateNodeLatency(edge.target);
+      const callLatency = targetLatency + (edge.data?.networkLatencyMs ?? 0);
+      const requestedConcurrency = edgeRps * (callLatency / 1000);
+
+      if (requestedConcurrency > effectiveBulkhead) {
+        const allowedRps = callLatency > 0 ? (effectiveBulkhead * 1000) / callLatency : edgeRps;
+        const failures = Math.max(0, edgeRps - allowedRps);
+        
+        edgeRpsMap[edge.id] = allowedRps;
+        edgeReadRpsMap[edge.id] = edgeRps > 0 ? (edgeReadRpsMap[edge.id] ?? 0) * (allowedRps / edgeRps) : 0;
+        edgeWriteRpsMap[edge.id] = edgeRps > 0 ? (edgeWriteRpsMap[edge.id] ?? 0) * (allowedRps / edgeRps) : 0;
+        edgeFailuresMap[edge.id] = (edgeFailuresMap[edge.id] ?? 0) + failures;
+      }
+    }
+  }
+
+  // Recalculate inbound maps based on bulkhead outcomes to protect target nodes
+  for (const node of nodes) {
+    const def = COMPONENT_DEFINITIONS[node.data.componentType as keyof typeof COMPONENT_DEFINITIONS];
+    if (def?.isSource) {
+      // Keep source node inbound as is
+    } else {
+      inboundRpsMap[node.id] = 0;
+      inboundReadRpsMap[node.id] = 0;
+      inboundWriteRpsMap[node.id] = 0;
+    }
+  }
+
+  for (const edge of edges) {
+    const edgeTotal = edgeRpsMap[edge.id] ?? 0;
+    const edgeRead = edgeReadRpsMap[edge.id] ?? 0;
+    const edgeWrite = edgeWriteRpsMap[edge.id] ?? 0;
+
+    inboundRpsMap[edge.target] = (inboundRpsMap[edge.target] ?? 0) + edgeTotal;
+    inboundReadRpsMap[edge.target] = (inboundReadRpsMap[edge.target] ?? 0) + edgeRead;
+    inboundWriteRpsMap[edge.target] = (inboundWriteRpsMap[edge.target] ?? 0) + edgeWrite;
+  }
+
   for (const node of nodes) {
     const targetInEdges = inboundEdges[node.id] ?? [];
     if (targetInEdges.length === 0) continue;

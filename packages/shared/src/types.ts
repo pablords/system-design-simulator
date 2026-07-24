@@ -97,6 +97,8 @@ export interface SimulatorEdgeData extends Record<string, unknown> {
   trafficType?: 'all' | 'read' | 'write';
   networkLatencyMs?: number;
   label?: string;
+  bulkheadEnabled?: boolean;
+  bulkheadLimit?: number;
 }
 
 export interface NodeMetrics {

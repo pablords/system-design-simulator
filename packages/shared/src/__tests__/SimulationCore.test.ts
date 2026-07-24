@@ -761,6 +761,63 @@ describe('SimulationCore Engine', () => {
       expect(res.updatedMetrics['client-1'].endToEndLatencyMs).toBeCloseTo(expectedE2E, 1);
     });
 
+    it('should apply bulkhead limit on edges and scale limit based on caller replicas', () => {
+      const nodes = [
+        {
+          id: 'client-1',
+          data: {
+            componentType: 'client',
+            category: 'client',
+            config: { maxRps: 15, replicas: 1 },
+          },
+        },
+        {
+          id: 'app-1',
+          data: {
+            componentType: 'app-server',
+            category: 'compute',
+            config: { maxRps: 100 },
+          },
+        },
+      ];
+
+      const edges = [
+        {
+          id: 'e1',
+          source: 'client-1',
+          target: 'app-1',
+          data: {
+            bulkheadEnabled: true,
+            bulkheadLimit: 1, // 1 connection limit per replica
+            networkLatencyMs: 80, // Total latency will be 20ms base + 80ms network = 100ms
+          },
+        },
+      ];
+
+      // Case 1: 1 replica of client -> effective bulkhead limit = 1.
+      // Expected max RPS = 1 connection / 0.1s = 10 RPS.
+      const res1 = runSimulationTickCore({ nodes: nodes as any, edges: edges as any, tick: 1, globalTrafficScale: 100 });
+      expect(res1.updatedMetrics['app-1'].inboundRps).toBeCloseTo(10, 1);
+      expect(res1.updatedEdgeMetrics['e1'].failuresPerSecond).toBeCloseTo(5, 1);
+
+      // Case 2: 3 replicas of client -> effective bulkhead limit = 3.
+      // Expected max RPS = 3 connections / 0.1s = 30 RPS.
+      const nodesWith3Replicas = [
+        {
+          id: 'client-1',
+          data: {
+            componentType: 'client',
+            category: 'client',
+            config: { maxRps: 15, replicas: 3 },
+          },
+        },
+        nodes[1],
+      ];
+      const res2 = runSimulationTickCore({ nodes: nodesWith3Replicas as any, edges: edges as any, tick: 1, globalTrafficScale: 100 });
+      expect(res2.updatedMetrics['app-1'].inboundRps).toBeCloseTo(30, 1);
+      expect(res2.updatedEdgeMetrics['e1'].failuresPerSecond).toBeCloseTo(15, 1);
+    });
+
     it('should execute runSimulationBatchCore over multiple ticks', () => {
       const nodes = [
         { id: 'client-1', data: { componentType: 'client', category: 'client', config: { maxRps: 50 } } },

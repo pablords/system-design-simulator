@@ -21,6 +21,8 @@ export const SimulatorEdgeDataSchema = z
     trafficType: z.enum(['all', 'read', 'write']).optional(),
     networkLatencyMs: z.number().optional(),
     label: z.string().optional(),
+    bulkheadEnabled: z.boolean().optional(),
+    bulkheadLimit: z.number().optional(),
   })
   .passthrough();
 

@@ -248,6 +248,36 @@ export const ConfigPanel: React.FC = () => {
               onChange={(v) => updateEdge('networkLatencyMs', v)}
             />
 
+            <div className="config-section-title" style={{ marginTop: '12px' }}>🛡️ Bulkhead (Isolamento de Recursos)</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'rgba(255, 255, 255, 0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600 }}>Habilitar Bulkhead neste Link</span>
+                <input
+                  type="checkbox"
+                  checked={edge.data?.bulkheadEnabled ?? false}
+                  onChange={(e) => updateEdge('bulkheadEnabled', e.target.checked)}
+                  style={{ cursor: 'pointer' }}
+                />
+              </div>
+              
+              {(edge.data?.bulkheadEnabled ?? false) && (
+                <div style={{ marginTop: '6px' }}>
+                  <Slider
+                    label="Limite Máximo de Concorrência"
+                    value={edge.data?.bulkheadLimit ?? 10}
+                    min={1}
+                    max={500}
+                    step={1}
+                    unit=" conexões"
+                    onChange={(v) => updateEdge('bulkheadLimit', v)}
+                  />
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    Limita o número de requisições paralelas que este link pode transmitir simultaneamente. Requisições excedentes serão rejeitadas para isolar o recurso.
+                  </div>
+                </div>
+              )}
+            </div>
+
             {metrics && (
               <>
                 <div className="config-section-title" style={{ marginTop: '4px' }}>
