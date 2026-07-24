@@ -254,17 +254,17 @@ export const ConfigPanel: React.FC = () => {
                 <span style={{ fontSize: '12px', fontWeight: 600 }}>Habilitar Bulkhead neste Link</span>
                 <input
                   type="checkbox"
-                  checked={edge.data?.bulkheadEnabled ?? false}
+                  checked={(edge.data as any)?.bulkheadEnabled ?? false}
                   onChange={(e) => updateEdge('bulkheadEnabled', e.target.checked)}
                   style={{ cursor: 'pointer' }}
                 />
               </div>
               
-              {(edge.data?.bulkheadEnabled ?? false) && (
+              {((edge.data as any)?.bulkheadEnabled ?? false) && (
                 <div style={{ marginTop: '6px' }}>
                   <Slider
                     label="Limite Máximo de Concorrência"
-                    value={edge.data?.bulkheadLimit ?? 10}
+                    value={(edge.data as any)?.bulkheadLimit ?? 10}
                     min={1}
                     max={500}
                     step={1}
