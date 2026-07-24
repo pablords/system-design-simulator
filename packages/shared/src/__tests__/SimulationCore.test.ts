@@ -451,7 +451,7 @@ describe('SimulationCore Engine', () => {
           data: {
             componentType: 'client',
             category: 'client',
-            config: { maxRps: 1000, replicas: 1, timeoutMs: 100 }, // Strict 100ms client timeout
+            config: { maxRps: 1000, replicas: 1, timeoutMs: 100, connectionPool: 2 }, // Strict 100ms client timeout with local pool limit of 2
           },
         },
         {
@@ -816,6 +816,97 @@ describe('SimulationCore Engine', () => {
       const res2 = runSimulationTickCore({ nodes: nodesWith3Replicas as any, edges: edges as any, tick: 1, globalTrafficScale: 100 });
       expect(res2.updatedMetrics['app-1'].inboundRps).toBeCloseTo(30, 1);
       expect(res2.updatedEdgeMetrics['e1'].failuresPerSecond).toBeCloseTo(15, 1);
+    });
+
+    it('should reject all write requests and reflect critical status when storage reaches 100% capacity', () => {
+      const nodes = [
+        {
+          id: 'client-1',
+          data: {
+            componentType: 'client',
+            category: 'client',
+            config: { maxRps: 100, writeRatio: 0.5 },
+          },
+        },
+        {
+          id: 'object-store-1',
+          data: {
+            componentType: 'object-store',
+            category: 'storage',
+            config: { maxRps: 1000, storageGb: 10 },
+            metrics: { storagePct: 100, status: 'ok' },
+          },
+        },
+      ];
+      const edges = [{ id: 'e1', source: 'client-1', target: 'object-store-1' }];
+
+      const res = runSimulationTickCore({ nodes: nodes as any, edges: edges as any, tick: 1, globalTrafficScale: 100 });
+      
+      // Since storagePct is 100%, all write requests (50 RPS) must fail.
+      expect(res.updatedMetrics['object-store-1'].status).toBe('critical');
+      expect(res.updatedMetrics['object-store-1'].failedRps).toBe(50);
+      expect(res.updatedMetrics['object-store-1'].successRps).toBe(50); // Read requests (50 RPS) still succeed
+      expect(res.bottlenecks.some(b => b.type === 'storage' && b.severity === 'critical')).toBe(true);
+    });
+
+    it('should simulate two-stage database connection pool with client pool queueing and server-side refusal', () => {
+      const nodes = [
+        {
+          id: 'app-1',
+          data: {
+            componentType: 'client',
+            category: 'client',
+            config: { maxRps: 1000, connectionPool: 2, timeoutMs: 1000 },
+          },
+        },
+        {
+          id: 'db-1',
+          data: {
+            componentType: 'sql-database',
+            category: 'storage',
+            config: { maxRps: 2000, connectionPool: 1 }, // Server DB max conns = 1
+          },
+        },
+      ];
+      const edges = [{ id: 'e1', source: 'app-1', target: 'db-1' }];
+
+      // Case 1: Inbound = 400 RPS. DB latency = 5ms.
+      // Connections requested = 400 * 0.005 = 2.
+      // This is exactly matching app-1's client pool limit of 2. So no client-side pool timeout/failures.
+      // But DB max conns is 1. So DB refuses the excess 1 connection.
+      // Saturation ratio = 1 / 2 = 50%. Successful RPS = 400 * 0.5 = 200 RPS. Refused RPS = 200.
+      const res = runSimulationTickCore({ nodes: nodes as any, edges: edges as any, tick: 1, globalTrafficScale: 40 });
+      expect(res.updatedEdgeMetrics['e1'].rps).toBeCloseTo(200, 1);
+      expect(res.updatedEdgeMetrics['e1'].failuresPerSecond).toBeCloseTo(200, 1);
+    });
+
+    it('should accumulate cache memory and trigger write failures under eviction policy none', () => {
+      const nodes = [
+        {
+          id: 'client-1',
+          data: {
+            componentType: 'client',
+            category: 'client',
+            config: { maxRps: 200, writeRatio: 1.0 },
+          },
+        },
+        {
+          id: 'cache-1',
+          data: {
+            componentType: 'cache',
+            category: 'storage',
+            config: { maxRps: 1000, memoryLimitMb: 100, evictionPolicy: 'none' },
+            metrics: { ramPct: 99 },
+          },
+        },
+      ];
+      const edges = [{ id: 'e1', source: 'client-1', target: 'cache-1' }];
+
+      const res = runSimulationTickCore({ nodes: nodes as any, edges: edges as any, tick: 1, globalTrafficScale: 100 });
+      expect(res.updatedMetrics['cache-1'].ramPct).toBe(100);
+      expect(res.updatedMetrics['cache-1'].failedRps).toBe(200); // All writes fail under OOM none
+      expect(res.updatedMetrics['cache-1'].status).toBe('critical');
+      expect(res.bottlenecks.some(b => b.type === 'ram' && b.severity === 'critical')).toBe(true);
     });
 
     it('should execute runSimulationBatchCore over multiple ticks', () => {

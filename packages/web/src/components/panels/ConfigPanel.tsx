@@ -88,6 +88,13 @@ export const ConfigPanel: React.FC = () => {
 
   const [selectedTraceSourceId, setSelectedTraceSourceId] = React.useState<string>('');
   const [activeTab, setActiveTab] = React.useState<'dashboard' | 'resources' | 'specific' | 'connections'>('dashboard');
+  const [localConfig, setLocalConfig] = React.useState<Record<string, any>>({});
+
+  React.useEffect(() => {
+    if (node) {
+      setLocalConfig(node.data.config || {});
+    }
+  }, [selectedNodeId, node?.data?.config]);
 
   const incomingEdges = React.useMemo(() => {
     return node ? edges.filter(e => e.target === node.id) : [];
@@ -117,7 +124,7 @@ export const ConfigPanel: React.FC = () => {
   }, [selectedNodeId]);
 
   const update = (key: string, value: number | string | boolean) => {
-    if (node) updateNodeConfig(node.id, { [key]: value });
+    setLocalConfig((prev) => ({ ...prev, [key]: value }));
   };
 
   if (!node && edge) {
@@ -373,7 +380,8 @@ export const ConfigPanel: React.FC = () => {
   if (!node) return null;
 
   const def = COMPONENT_DEFINITIONS[node.data.componentType];
-  const { config, metrics } = node.data;
+  const { metrics } = node.data;
+  const config = localConfig;
 
 
   const historyData = metrics.history.map((h) => ({
@@ -1322,7 +1330,12 @@ export const ConfigPanel: React.FC = () => {
               fontWeight: 600,
               cursor: 'pointer',
             }}
-            onClick={() => selectNode(null)}
+            onClick={() => {
+              if (node) {
+                updateNodeConfig(node.id, localConfig);
+              }
+              selectNode(null);
+            }}
           >
             Salvar e Fechar
           </button>

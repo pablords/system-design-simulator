@@ -456,50 +456,74 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
     }
 
     if (cfg.connectionPool !== undefined) {
-      const poolLimit = cfg.connectionPool * (cfg.replicas ?? 1);
-      let totalRequestedConnections = 0;
-      const requestedMap: Record<string, number> = {};
+      const dbMaxConns = cfg.connectionPool * (cfg.replicas ?? 1);
+      
+      const clientQueueSizes: Record<string, number> = {};
+      const clientWaitTimes: Record<string, number> = {};
+      const clientTimeouts: Record<string, number> = {};
+      const attemptedConnsMap: Record<string, number> = {};
+      const attemptedRpsMap: Record<string, number> = {};
+      
+      let totalAttemptedConns = 0;
 
       for (const edge of targetInEdges) {
+        const source = nodeMap.get(edge.source);
+        const sourceActiveReplicas = getActiveReplicas(edge.source);
+        const clientPoolLimit = (source?.data.config.connectionPool ?? 100) * sourceActiveReplicas;
+
         const edgeRps = edgeRpsMap[edge.id] ?? 0;
         const requested = edgeRps * (latencyMs / 1000);
-        requestedMap[edge.id] = requested;
-        totalRequestedConnections += requested;
-      }
 
-      if (totalRequestedConnections > poolLimit) {
-        const saturationRatio = poolLimit / totalRequestedConnections;
+        let queueSize = 0;
+        let waitTimeMs = 0;
+        let timeoutsPerSecond = 0;
+        let allocated = requested;
 
-        for (const edge of targetInEdges) {
-          const requested = requestedMap[edge.id] ?? 0;
-          const allocated = requested * saturationRatio;
-          const queueSize = Math.max(0, requested - allocated);
-          const edgeRps = edgeRpsMap[edge.id] ?? 0;
+        if (requested > clientPoolLimit) {
+          allocated = clientPoolLimit;
+          queueSize = Math.max(0, requested - clientPoolLimit);
+          const waitSec = clientPoolLimit > 0 ? (queueSize * (latencyMs / 1000)) / clientPoolLimit : 0;
+          waitTimeMs = waitSec * 1000;
 
-          const waitSec = allocated > 0 ? (queueSize * (latencyMs / 1000)) / allocated : 0;
-          const waitTimeMs = waitSec * 1000;
-
-          const sourceNode = nodeMap.get(edge.source);
-          const sourceTimeoutMs = sourceNode?.data.config.timeoutMs ?? 1000;
-
-          let timeoutsPerSecond = 0;
+          const sourceTimeoutMs = source?.data.config.timeoutMs ?? 1000;
           if (waitTimeMs > sourceTimeoutMs) {
             const timeoutRatio = Math.min(1, (waitTimeMs - sourceTimeoutMs) / waitTimeMs);
             timeoutsPerSecond = edgeRps * timeoutRatio;
           }
+        }
 
-          edgeQueuesMap[edge.id] = queueSize;
-          edgeTimeoutsMap[edge.id] = timeoutsPerSecond;
-          edgeWaitTimeMap[edge.id] = waitTimeMs;
+        clientQueueSizes[edge.id] = queueSize;
+        clientWaitTimes[edge.id] = waitTimeMs;
+        clientTimeouts[edge.id] = timeoutsPerSecond;
 
-          const successfulRps = Math.max(0, edgeRps - timeoutsPerSecond);
-          edgeRpsMap[edge.id] = successfulRps;
+        const attemptedRps = Math.max(0, edgeRps - timeoutsPerSecond);
+        const attemptedConns = attemptedRps * (latencyMs / 1000);
+        attemptedConnsMap[edge.id] = attemptedConns;
+        attemptedRpsMap[edge.id] = attemptedRps;
+        totalAttemptedConns += attemptedConns;
+      }
 
-          if (edgeRps > 0) {
-            const scale = successfulRps / edgeRps;
-            edgeReadRpsMap[edge.id] = (edgeReadRpsMap[edge.id] ?? 0) * scale;
-            edgeWriteRpsMap[edge.id] = (edgeWriteRpsMap[edge.id] ?? 0) * scale;
-          }
+      const saturationRatio = totalAttemptedConns > dbMaxConns ? dbMaxConns / totalAttemptedConns : 1.0;
+
+      for (const edge of targetInEdges) {
+        const attemptedRps = attemptedRpsMap[edge.id] ?? 0;
+        const timeoutsPerSecond = clientTimeouts[edge.id] ?? 0;
+        const originalEdgeRps = edgeRpsMap[edge.id] ?? 0;
+
+        const successfulRps = attemptedRps * saturationRatio;
+        const refusedRps = attemptedRps * (1 - saturationRatio);
+
+        edgeQueuesMap[edge.id] = clientQueueSizes[edge.id] ?? 0;
+        edgeTimeoutsMap[edge.id] = timeoutsPerSecond;
+        edgeWaitTimeMap[edge.id] = clientWaitTimes[edge.id] ?? 0;
+        edgeFailuresMap[edge.id] = (edgeFailuresMap[edge.id] ?? 0) + refusedRps;
+
+        edgeRpsMap[edge.id] = successfulRps;
+
+        if (originalEdgeRps > 0) {
+          const scale = successfulRps / originalEdgeRps;
+          edgeReadRpsMap[edge.id] = (edgeReadRpsMap[edge.id] ?? 0) * scale;
+          edgeWriteRpsMap[edge.id] = (edgeWriteRpsMap[edge.id] ?? 0) * scale;
         }
       }
     }
@@ -669,7 +693,28 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
     const overloadFactor = utilization > 1 ? (utilization - 1) * 5 : 0;
 
     let cpuPct = clamp(def.baseCpuPct * utilization + overloadFactor * 10, 0, 100);
-    let ramPct = clamp(def.baseRamPct + utilization * (100 - def.baseRamPct) * 0.5, 0, 100);
+    
+    let ramPct = 0;
+    let cacheOomWriteErrors = 0;
+    let cacheThrashingHitRatePenalty = 0;
+
+    if (node.data.componentType === 'cache') {
+      const prevRam = prevMetrics?.ramPct ?? def.baseRamPct;
+      const memLimit = cfg.memoryLimitMb ?? 512;
+      const growth = (inboundWrite * 2.0 / memLimit) * 100;
+      ramPct = clamp(prevRam + growth, def.baseRamPct, 100);
+
+      if (ramPct >= 100) {
+        ramPct = 100;
+        if (cfg.evictionPolicy === 'none') {
+          cacheOomWriteErrors = inboundWrite;
+        } else {
+          cacheThrashingHitRatePenalty = clamp((inboundWrite / memLimit) * 0.5, 0, 0.5);
+        }
+      }
+    } else {
+      ramPct = clamp(def.baseRamPct + utilization * (100 - def.baseRamPct) * 0.5, 0, 100);
+    }
 
     const prevQueue = prevMetrics?.queueDepth ?? 0;
     const nodeTimeoutMs = cfg.timeoutMs ?? 5000;
@@ -705,7 +750,7 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
     const prevStoragePct = prevMetrics?.storagePct ?? 0;
     let storagePct = prevStoragePct;
     if (def.accumulatesStorage && cfg.storageGb && cfg.storageGb > 0) {
-      const storageGrowthPerTick = (inboundWrite * 0.05) / cfg.storageGb;
+      const storageGrowthPerTick = (inboundWrite * 5.0) / cfg.storageGb;
       storagePct = clamp(prevStoragePct + storageGrowthPerTick, 0, 100);
     }
 
@@ -725,11 +770,11 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
 
           if (inboundWrite > 0 && memoryLimit > 0) {
             const loadRatio = inboundWrite / memoryLimit;
-            let penalty = 0;
-            if (policy === 'fifo') penalty = clamp(loadRatio * 2, 0, 0.6);
-            else if (policy === 'lru') penalty = clamp(Math.log10(loadRatio + 1) * 0.5, 0, 0.3);
-            else if (policy === 'lfu') penalty = clamp(Math.log10(loadRatio + 1) * 0.7, 0, 0.4);
-            else if (policy === 'none') penalty = clamp(loadRatio * 5, 0, 0.95);
+            let penalty = cacheThrashingHitRatePenalty;
+            if (policy === 'fifo') penalty += clamp(loadRatio * 2, 0, 0.6);
+            else if (policy === 'lru') penalty += clamp(Math.log10(loadRatio + 1) * 0.5, 0, 0.3);
+            else if (policy === 'lfu') penalty += clamp(Math.log10(loadRatio + 1) * 0.7, 0, 0.4);
+            else if (policy === 'none') penalty += clamp(loadRatio * 5, 0, 0.95);
             hitRate = clamp(hitRate - penalty, 0.05, 1.0);
           }
         }
@@ -774,6 +819,20 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
     } else {
       localFailures = Math.min(inbound, injectedErrors + overloadErrors + queueTimeouts + rateLimitFailures + deliveryErrors);
       localSuccess = Math.max(0, inbound - localFailures);
+    }
+
+    if (!crashedNodesSet.has(node.id) && storagePct >= 100) {
+      const baseFailures = localFailures;
+      localFailures = Math.min(inbound, baseFailures + inboundWrite);
+      localSuccess = Math.max(0, inbound - localFailures);
+      outboundWrite = 0;
+    }
+
+    if (!crashedNodesSet.has(node.id) && cacheOomWriteErrors > 0) {
+      const baseFailures = localFailures;
+      localFailures = Math.min(inbound, baseFailures + cacheOomWriteErrors);
+      localSuccess = Math.max(0, inbound - localFailures);
+      outboundWrite = 0;
     }
 
     const processSuccessRatio = inbound > 0 ? localSuccess / inbound : 1.0;
@@ -836,7 +895,68 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
       overloadTicks = 0;
     }
 
-    const status = isNowCrashing ? 'critical' : computeStatus(cpuPct, ramPct, utilization);
+    let status = isNowCrashing ? 'critical' : computeStatus(cpuPct, ramPct, utilization);
+    if (storagePct >= 100) {
+      status = 'critical';
+      bottlenecks.push({
+        nodeId: node.id,
+        nodeLabel: cfg.label,
+        type: 'storage',
+        severity: 'critical',
+        value: 100,
+        limit: 100,
+        message: `STORAGE FULL: ${cfg.label} atingiu 100% da capacidade (${cfg.storageGb} GB). Todas as novas escritas estão sendo rejeitadas!`,
+      });
+    } else if (storagePct >= 80) {
+      status = 'warning';
+      bottlenecks.push({
+        nodeId: node.id,
+        nodeLabel: cfg.label,
+        type: 'storage',
+        severity: 'warning',
+        value: Math.round(storagePct),
+        limit: 100,
+        message: `Espaço em disco reduzido: ${cfg.label} está com ${Math.round(storagePct)}% do armazenamento ocupado.`,
+      });
+    }
+
+    if (node.data.componentType === 'cache') {
+      if (ramPct >= 100) {
+        status = 'critical';
+        if (cfg.evictionPolicy === 'none') {
+          bottlenecks.push({
+            nodeId: node.id,
+            nodeLabel: cfg.label,
+            type: 'ram',
+            severity: 'critical',
+            value: 100,
+            limit: 100,
+            message: `CACHE OOM: ${cfg.label} sem política de evicção atingiu 100% de memória. Novas escritas estão sendo rejeitadas!`,
+          });
+        } else {
+          bottlenecks.push({
+            nodeId: node.id,
+            nodeLabel: cfg.label,
+            type: 'ram',
+            severity: 'warning',
+            value: 100,
+            limit: 100,
+            message: `CACHE SATURADO: ${cfg.label} atingiu 100% de memória. Evicção ativa (${cfg.evictionPolicy?.toUpperCase()}) gerando degradação de Hit Rate (cache thrashing).`,
+          });
+        }
+      } else if (ramPct >= 80) {
+        status = 'warning';
+        bottlenecks.push({
+          nodeId: node.id,
+          nodeLabel: cfg.label,
+          type: 'ram',
+          severity: 'warning',
+          value: Math.round(ramPct),
+          limit: 100,
+          message: `Uso de memória alto no Cache: ${cfg.label} está com ${Math.round(ramPct)}% da memória ocupada.`,
+        });
+      }
+    }
 
     const jitter = utilization > 1 ? (utilization - 1) * 0.4 : 0.05;
     const p50 = Math.round(latencyMs * 0.9 * 10) / 10;
