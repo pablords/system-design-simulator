@@ -242,12 +242,27 @@ export const useSimulatorStore = create<SimulatorStore>()(
   moveNodeToLayer: (nodeId, layerId) => {
     set((state) => {
       const layer = state.nodes.find((n) => n.id === layerId);
-      if (!layer) return {};
+      const node = state.nodes.find((n) => n.id === nodeId);
+      if (!layer || !node) return {};
+
+      // Calculate absolute positions of both nodes
+      const getAbs = (n: Node): { x: number; y: number } => {
+        if (!n.parentId) return n.position;
+        const p = state.nodes.find((parent) => parent.id === n.parentId);
+        if (!p) return n.position;
+        const pAbs = getAbs(p);
+        return { x: pAbs.x + n.position.x, y: pAbs.y + n.position.y };
+      };
+
+      const nodeAbs = getAbs(node);
+      const layerAbs = getAbs(layer);
+
+      const relX = nodeAbs.x - layerAbs.x;
+      const relY = nodeAbs.y - layerAbs.y;
+
       return {
         nodes: state.nodes.map((n) => {
           if (n.id !== nodeId) return n;
-          const relX = n.position.x - layer.position.x;
-          const relY = n.position.y - layer.position.y;
           return {
             ...n,
             parentId: layerId,
@@ -265,6 +280,18 @@ export const useSimulatorStore = create<SimulatorStore>()(
       const node = state.nodes.find((n) => n.id === nodeId);
       if (!node || !node.parentId) return {};
       const parent = state.nodes.find((n) => n.id === node.parentId);
+      if (!parent) return {};
+
+      const getAbs = (n: Node): { x: number; y: number } => {
+        if (!n.parentId) return n.position;
+        const p = state.nodes.find((parent) => parent.id === n.parentId);
+        if (!p) return n.position;
+        const pAbs = getAbs(p);
+        return { x: pAbs.x + n.position.x, y: pAbs.y + n.position.y };
+      };
+
+      const absPos = getAbs(node);
+
       return {
         nodes: state.nodes.map((n) => {
           if (n.id !== nodeId) return n;
@@ -273,10 +300,7 @@ export const useSimulatorStore = create<SimulatorStore>()(
             parentId: undefined,
             extent: undefined,
             zIndex: undefined,
-            position: {
-              x: n.position.x + (parent?.position.x ?? 0),
-              y: n.position.y + (parent?.position.y ?? 0),
-            },
+            position: absPos,
           };
         }),
       };

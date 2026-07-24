@@ -22,21 +22,37 @@ import { Map, EyeOff } from 'lucide-react';
 const nodeTypes = { simulatorNode: ComponentNode, layerNode: LayerNode };
 const edgeTypes = { connectionEdge: ConnectionEdge };
 
-/** Returns true if node bounding box overlaps the layer bounding box */
-function isNodeInsideLayer(node: Node, layer: Node): boolean {
-  const nodeX = node.position.x;
-  const nodeY = node.position.y;
-  const nodeW = (node.measured?.width ?? node.width ?? 160);
-  const nodeH = (node.measured?.height ?? node.height ?? 80);
-  const lX = layer.position.x;
-  const lY = layer.position.y;
-  const lW = (layer.measured?.width ?? layer.width ?? 400);
-  const lH = (layer.measured?.height ?? layer.height ?? 300);
+/** Recursively calculates the absolute position of a node in flow coordinates */
+function getAbsolutePosition(node: Node, allNodes: Node[]): { x: number; y: number } {
+  if (!node.parentId) return node.position;
+  const parent = allNodes.find((n) => n.id === node.parentId);
+  if (!parent) return node.position;
+  const parentAbs = getAbsolutePosition(parent, allNodes);
+  return {
+    x: parentAbs.x + node.position.x,
+    y: parentAbs.y + node.position.y,
+  };
+}
 
-  const centerX = nodeX + nodeW / 2;
-  const centerY = nodeY + nodeH / 2;
+/** Returns true if node bounding box overlaps the layer bounding box (using absolute coordinates) */
+function isNodeInsideLayer(node: Node, layer: Node, allNodes: Node[]): boolean {
+  const absPos = getAbsolutePosition(node, allNodes);
+  const nodeW = node.measured?.width ?? node.width ?? 160;
+  const nodeH = node.measured?.height ?? node.height ?? 80;
 
-  return centerX >= lX && centerX <= lX + lW && centerY >= lY && centerY <= lY + lH;
+  const layerAbsPos = getAbsolutePosition(layer, allNodes);
+  const lW = layer.measured?.width ?? layer.width ?? 400;
+  const lH = layer.measured?.height ?? layer.height ?? 300;
+
+  const centerX = absPos.x + nodeW / 2;
+  const centerY = absPos.y + nodeH / 2;
+
+  return (
+    centerX >= layerAbsPos.x &&
+    centerX <= layerAbsPos.x + lW &&
+    centerY >= layerAbsPos.y &&
+    centerY <= layerAbsPos.y + lH
+  );
 }
 
 const CanvasInner: React.FC = () => {
@@ -57,8 +73,21 @@ const CanvasInner: React.FC = () => {
 
       const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       addNode(componentType, position);
+
+      // Auto-attach to layer if dropped inside one
+      setTimeout(() => {
+        const currentNodes = useSimulatorStore.getState().nodes;
+        const newlyAdded = currentNodes.find((n) => n.data.componentType === componentType && n.position.x === position.x && n.position.y === position.y);
+        if (newlyAdded) {
+          const layers = currentNodes.filter((n) => n.type === 'layerNode');
+          const targetLayer = layers.find((layer) => isNodeInsideLayer(newlyAdded, layer, currentNodes));
+          if (targetLayer) {
+            moveNodeToLayer(newlyAdded.id, targetLayer.id);
+          }
+        }
+      }, 50);
     },
-    [screenToFlowPosition, addNode]
+    [screenToFlowPosition, addNode, moveNodeToLayer]
   );
 
   const onPaneClick = useCallback(() => {
@@ -78,9 +107,9 @@ const CanvasInner: React.FC = () => {
     // Only move simulatorNodes, not layers
     if (draggedNode.type !== 'simulatorNode') return;
 
-    // Find a layer that contains the dragged node's center
+    // Find a layer that contains the dragged node's center (using absolute coords)
     const layers = nodes.filter((n) => n.type === 'layerNode');
-    const overlappingLayer = layers.find((layer) => isNodeInsideLayer(draggedNode, layer));
+    const overlappingLayer = layers.find((layer) => isNodeInsideLayer(draggedNode, layer, nodes));
 
     if (overlappingLayer && draggedNode.parentId !== overlappingLayer.id) {
       moveNodeToLayer(draggedNode.id, overlappingLayer.id);
