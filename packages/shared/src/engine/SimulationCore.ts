@@ -143,6 +143,46 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
   const visited = new Set<string>();
   const queue = nodes.filter((n) => COMPONENT_DEFINITIONS[n.data.componentType as keyof typeof COMPONENT_DEFINITIONS]?.isSource).map((n) => n.id);
 
+  // === PHASE 3: Layer-scoped auto-telemetry ===
+  // Build maps: which nodes belong to which layer, which obs nodes are in each layer
+  const obsNodeTypes = new Set(['metrics', 'logs', 'tracing']);
+  const layerObsMap: Record<string, string[]> = {};  // layerId -> obs node ids
+  const nodeLayerMap: Record<string, string> = {};   // nodeId -> layerId
+
+  for (const node of nodes) {
+    const parentId = (node as any).parentId as string | undefined;
+    if (!parentId) continue;
+    nodeLayerMap[node.id] = parentId;
+    if (obsNodeTypes.has(node.data.componentType)) {
+      if (!layerObsMap[parentId]) layerObsMap[parentId] = [];
+      layerObsMap[parentId].push(node.id);
+    }
+  }
+
+  // For each non-obs node inside a layer that has obs nodes:
+  // inject 2% of its RPS into each obs node in the same layer (telemetry overhead)
+  for (const node of nodes) {
+    const layerId = nodeLayerMap[node.id];
+    if (!layerId) continue;
+    if (obsNodeTypes.has(node.data.componentType)) continue; // skip obs nodes themselves
+
+    const obsNodesInLayer = layerObsMap[layerId] ?? [];
+    if (obsNodesInLayer.length === 0) continue;
+
+    const def = COMPONENT_DEFINITIONS[node.data.componentType as keyof typeof COMPONENT_DEFINITIONS];
+    if (!def || def.isContainer) continue;
+
+    // Approximate telemetry load: 2% of node's maxRps * replicas
+    const nodeMaxRps = (node.data.config.maxRps ?? 0) * (node.data.config.replicas ?? 1) * (globalTrafficScale / 100);
+    const telemetryRps = nodeMaxRps * 0.02;
+
+    for (const obsNodeId of obsNodesInLayer) {
+      inboundRpsMap[obsNodeId] = (inboundRpsMap[obsNodeId] ?? 0) + telemetryRps;
+      inboundReadRpsMap[obsNodeId] = (inboundReadRpsMap[obsNodeId] ?? 0) + telemetryRps;
+    }
+  }
+  // === END PHASE 3 ===
+
   while (queue.length > 0) {
     const currentId = queue.shift()!;
     if (visited.has(currentId)) continue;
@@ -153,6 +193,7 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
 
     const def = COMPONENT_DEFINITIONS[currentNode.data.componentType as keyof typeof COMPONENT_DEFINITIONS];
     if (!def) continue;
+    if (def.isContainer) continue;  // layer nodes are visual groups, skip BFS processing
 
     const inboundRead = inboundReadRpsMap[currentId] ?? 0;
     const inboundWrite = inboundWriteRpsMap[currentId] ?? 0;

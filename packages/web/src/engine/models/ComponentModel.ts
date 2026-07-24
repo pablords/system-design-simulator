@@ -18,6 +18,7 @@ export interface ComponentDefinition {
   isSource: boolean;
   // Is a sink node (consumes requests without forwarding)?
   isSink: boolean;
+  isContainer?: boolean;  // container nodes (layers) hold child nodes
 }
 
 export const COMPONENT_DEFINITIONS: Record<ComponentType, ComponentDefinition> = {
@@ -529,6 +530,24 @@ export const COMPONENT_DEFINITIONS: Record<ComponentType, ComponentDefinition> =
     isSource: false,
     isSink: false,
   },
+
+  // === LAYER (container) ===
+  'layer': {
+    type: 'layer',
+    category: 'layer',
+    label: 'Camada',
+    description: 'Agrupa componentes em uma camada lógica (Serviço, VPC, Zona, etc.)',
+    icon: '▭',
+    color: '#6366f1',
+    defaultConfig: { label: 'Nova Camada' },
+    baseCpuPct: 0,
+    baseRamPct: 0,
+    baseLatencyMs: 0,
+    accumulatesStorage: false,
+    isSource: false,
+    isSink: false,
+    isContainer: true,
+  },
 };
 
 export const CATEGORIES: { id: ComponentCategory; label: string; icon: string }[] = [
@@ -539,4 +558,5 @@ export const CATEGORIES: { id: ComponentCategory; label: string; icon: string }[
   { id: 'messaging', label: 'MESSAGING', icon: '📨' },
   { id: 'observability', label: 'OBSERVABILITY', icon: '📡' },
   { id: 'network', label: 'NETWORK', icon: '🕸️' },
+  { id: 'layer', label: 'CAMADAS', icon: '▭' },
 ];

@@ -7,20 +7,40 @@ import {
   BackgroundVariant,
   ReactFlowProvider,
   useReactFlow,
+  ConnectionMode,
 } from '@xyflow/react';
+import type { Node } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { ComponentNode } from './ComponentNode';
+import { LayerNode } from './LayerNode';
 import { useSimulatorStore } from '../../store/simulatorStore';
 import type { ComponentType } from '../../types';
 
 import { ConnectionEdge } from './ConnectionEdge';
 import { Map, EyeOff } from 'lucide-react';
 
-const nodeTypes = { simulatorNode: ComponentNode };
+const nodeTypes = { simulatorNode: ComponentNode, layerNode: LayerNode };
 const edgeTypes = { connectionEdge: ConnectionEdge };
 
+/** Returns true if node bounding box overlaps the layer bounding box */
+function isNodeInsideLayer(node: Node, layer: Node): boolean {
+  const nodeX = node.position.x;
+  const nodeY = node.position.y;
+  const nodeW = (node.measured?.width ?? node.width ?? 160);
+  const nodeH = (node.measured?.height ?? node.height ?? 80);
+  const lX = layer.position.x;
+  const lY = layer.position.y;
+  const lW = (layer.measured?.width ?? layer.width ?? 400);
+  const lH = (layer.measured?.height ?? layer.height ?? 300);
+
+  const centerX = nodeX + nodeW / 2;
+  const centerY = nodeY + nodeH / 2;
+
+  return centerX >= lX && centerX <= lX + lW && centerY >= lY && centerY <= lY + lH;
+}
+
 const CanvasInner: React.FC = () => {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, selectNode, selectEdge, showMinimap, toggleMinimap } = useSimulatorStore();
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, selectNode, selectEdge, showMinimap, toggleMinimap, moveNodeToLayer, removeNodeFromLayer } = useSimulatorStore();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
 
@@ -54,6 +74,21 @@ const CanvasInner: React.FC = () => {
     selectEdge(edge.id);
   }, [selectEdge]);
 
+  const onNodeDragStop = useCallback((_: MouseEvent | TouchEvent, draggedNode: Node) => {
+    // Only move simulatorNodes, not layers
+    if (draggedNode.type !== 'simulatorNode') return;
+
+    // Find a layer that contains the dragged node's center
+    const layers = nodes.filter((n) => n.type === 'layerNode');
+    const overlappingLayer = layers.find((layer) => isNodeInsideLayer(draggedNode, layer));
+
+    if (overlappingLayer && draggedNode.parentId !== overlappingLayer.id) {
+      moveNodeToLayer(draggedNode.id, overlappingLayer.id);
+    } else if (!overlappingLayer && draggedNode.parentId) {
+      removeNodeFromLayer(draggedNode.id);
+    }
+  }, [nodes, moveNodeToLayer, removeNodeFromLayer]);
+
   return (
     <div ref={reactFlowWrapper} className="canvas-wrapper" onDragOver={onDragOver} onDrop={onDrop}>
       <ReactFlow
@@ -65,8 +100,10 @@ const CanvasInner: React.FC = () => {
         onPaneClick={onPaneClick}
         onNodeClick={onNodeClick}
         onEdgeClick={onEdgeClick}
+        onNodeDragStop={onNodeDragStop}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        connectionMode={ConnectionMode.Loose}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         defaultEdgeOptions={{

@@ -10,11 +10,11 @@ describe('ComponentPalette Component Suite', () => {
     useSimulatorStore.getState().clearCanvas();
   });
 
-  it('should contain all 33 system component definitions across 7 categories', () => {
+  it('should contain all 34 system component definitions across 8 categories (including layer container)', () => {
     const definitionsCount = Object.keys(COMPONENT_DEFINITIONS).length;
-    expect(definitionsCount).toBe(33);
+    expect(definitionsCount).toBe(34);
 
-    expect(CATEGORIES.length).toBe(7);
+    expect(CATEGORIES.length).toBe(8);
     const categoryIds = CATEGORIES.map((c) => c.id);
     expect(categoryIds).toEqual([
       'client',
@@ -24,6 +24,7 @@ describe('ComponentPalette Component Suite', () => {
       'messaging',
       'observability',
       'network',
+      'layer',
     ]);
   });
 

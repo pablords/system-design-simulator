@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, Search, GraduationCap, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, GraduationCap, X, Layers } from 'lucide-react';
 import type { ComponentCategory } from '../../types';
 import type { ComponentDefinition } from '../../engine/models/ComponentModel';
 import { COMPONENT_DEFINITIONS, CATEGORIES } from '../../engine/models/ComponentModel';
@@ -39,7 +39,7 @@ interface ComponentPaletteProps {
 type CollapsedState = Partial<Record<ComponentCategory, boolean>>;
 
 export const ComponentPalette: React.FC<ComponentPaletteProps> = ({ isOpen, onClose }) => {
-  const { addNode } = useSimulatorStore();
+  const { addNode, addLayer } = useSimulatorStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<CollapsedState>({
@@ -50,6 +50,7 @@ export const ComponentPalette: React.FC<ComponentPaletteProps> = ({ isOpen, onCl
     messaging: false,
     observability: true,
     network: true,
+    layer: true,
   });
 
   const handleComponentClick = (type: string) => {
@@ -61,8 +62,9 @@ export const ComponentPalette: React.FC<ComponentPaletteProps> = ({ isOpen, onCl
     setCollapsed((prev) => ({ ...prev, [cat]: !prev[cat] }));
   };
 
-  // Filter components by search query
+  // Filter components by search query, exclude container/layer type (has dedicated button)
   const filteredDefinitions = Object.values(COMPONENT_DEFINITIONS).filter((def) => {
+    if (def.isContainer) return false;
     const query = searchQuery.toLowerCase();
     return (
       def.label.toLowerCase().includes(query) ||
@@ -71,7 +73,7 @@ export const ComponentPalette: React.FC<ComponentPaletteProps> = ({ isOpen, onCl
     );
   });
 
-  const componentsByCategory = CATEGORIES.map((cat) => ({
+  const componentsByCategory = CATEGORIES.filter((c) => c.id !== 'layer').map((cat) => ({
     ...cat,
     components: filteredDefinitions.filter((d) => d.category === cat.id),
   })).filter((cat) => cat.components.length > 0);
@@ -105,6 +107,15 @@ export const ComponentPalette: React.FC<ComponentPaletteProps> = ({ isOpen, onCl
               className="palette-search-input"
             />
           </div>
+          {/* Create Layer Button */}
+          <button
+            className="palette-add-layer-btn"
+            onClick={() => addLayer({ x: 200, y: 150 })}
+            title="Criar uma nova camada no canvas para agrupar componentes"
+          >
+            <Layers size={13} />
+            <span>+ Criar Camada</span>
+          </button>
         </div>
 
         {/* Categories list */}

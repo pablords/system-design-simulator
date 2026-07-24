@@ -8,6 +8,7 @@ export const ComponentCategorySchema = z.enum([
   'messaging',
   'observability',
   'network',
+  'layer',
 ]);
 
 export const ComponentTypeSchema = z.enum([
@@ -51,6 +52,8 @@ export const ComponentTypeSchema = z.enum([
   // Network
   'vpc',
   'subnet',
+  // Layer (container)
+  'layer',
 ]);
 
 export const ComponentConfigSchema = z.object({

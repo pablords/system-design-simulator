@@ -42,6 +42,9 @@ interface SimulatorStore {
   connectNodes: (sourceId: string, targetId: string) => void;
   disconnectNodes: (sourceId: string, targetId: string) => void;
   addNode: (type: ComponentType, position: { x: number; y: number }) => void;
+  addLayer: (position: { x: number; y: number }) => void;
+  moveNodeToLayer: (nodeId: string, layerId: string) => void;
+  removeNodeFromLayer: (nodeId: string) => void;
   removeNode: (id: string) => void;
   selectNode: (id: string | null) => void;
   selectEdge: (id: string | null) => void;
@@ -197,16 +200,85 @@ export const useSimulatorStore = create<SimulatorStore>()(
 
   removeNode: (id) => {
     set((state) => {
-      const remainingEdges = state.edges.filter((e) => e.source !== id && e.target !== id);
-      const isSelectedEdgeDeleted = state.selectedEdgeId 
+      // When removing a layer, also remove all child nodes
+      const childIds = state.nodes
+        .filter((n) => n.parentId === id)
+        .map((n) => n.id);
+      const idsToRemove = new Set([id, ...childIds]);
+      const remainingEdges = state.edges.filter(
+        (e) => !idsToRemove.has(e.source) && !idsToRemove.has(e.target)
+      );
+      const isSelectedEdgeDeleted = state.selectedEdgeId
         ? !remainingEdges.some((e) => e.id === state.selectedEdgeId)
         : false;
 
       return {
-        nodes: state.nodes.filter((n) => n.id !== id),
+        nodes: state.nodes.filter((n) => !idsToRemove.has(n.id)),
         edges: remainingEdges,
-        selectedNodeId: state.selectedNodeId === id ? null : state.selectedNodeId,
+        selectedNodeId: idsToRemove.has(state.selectedNodeId ?? '') ? null : state.selectedNodeId,
         selectedEdgeId: isSelectedEdgeDeleted ? null : state.selectedEdgeId,
+      };
+    });
+  },
+
+  addLayer: (position) => {
+    const id = `layer-${Date.now()}`;
+    const newLayer: Node<SimulatorNodeData> = {
+      id,
+      type: 'layerNode',
+      position,
+      style: { width: 400, height: 300 },
+      data: {
+        componentType: 'layer',
+        category: 'layer',
+        config: { label: 'Nova Camada', layerColor: '#6366f1' },
+        metrics: createDefaultMetrics(),
+      } as SimulatorNodeData,
+      zIndex: -1,
+    };
+    set((state) => ({ nodes: [newLayer, ...state.nodes] }));
+  },
+
+  moveNodeToLayer: (nodeId, layerId) => {
+    set((state) => {
+      const layer = state.nodes.find((n) => n.id === layerId);
+      if (!layer) return {};
+      return {
+        nodes: state.nodes.map((n) => {
+          if (n.id !== nodeId) return n;
+          const relX = n.position.x - layer.position.x;
+          const relY = n.position.y - layer.position.y;
+          return {
+            ...n,
+            parentId: layerId,
+            extent: 'parent' as const,
+            position: { x: Math.max(0, relX), y: Math.max(30, relY) },
+            zIndex: 1,
+          };
+        }),
+      };
+    });
+  },
+
+  removeNodeFromLayer: (nodeId) => {
+    set((state) => {
+      const node = state.nodes.find((n) => n.id === nodeId);
+      if (!node || !node.parentId) return {};
+      const parent = state.nodes.find((n) => n.id === node.parentId);
+      return {
+        nodes: state.nodes.map((n) => {
+          if (n.id !== nodeId) return n;
+          return {
+            ...n,
+            parentId: undefined,
+            extent: undefined,
+            zIndex: undefined,
+            position: {
+              x: n.position.x + (parent?.position.x ?? 0),
+              y: n.position.y + (parent?.position.y ?? 0),
+            },
+          };
+        }),
       };
     });
   },

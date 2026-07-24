@@ -55,6 +55,21 @@ export const ComponentNode = memo(({ id, data: rawData, selected }: NodeProps) =
     removeNode(id);
   };
 
+  // Multi-position handles: 4 targets (input = blue/purple) + 4 sources (output = green)
+  const TARGET_HANDLES = [
+    { id: 'target-top',    position: Position.Top,    style: { left: '50%', top: '-6px',    transform: 'translateX(-50%)' } },
+    { id: 'target-right',  position: Position.Right,  style: { top: '50%',  right: '-6px',  transform: 'translateY(-50%)' } },
+    { id: 'target-bottom', position: Position.Bottom, style: { left: '50%', bottom: '-6px', transform: 'translateX(-50%)' } },
+    { id: 'target-left',   position: Position.Left,   style: { top: '50%',  left: '-6px',   transform: 'translateY(-50%)' } },
+  ];
+
+  const SOURCE_HANDLES = [
+    { id: 'source-top',    position: Position.Top,    style: { left: '35%', top: '-6px',    transform: 'translateX(-50%)' } },
+    { id: 'source-right',  position: Position.Right,  style: { top: '35%',  right: '-6px',  transform: 'translateY(-50%)' } },
+    { id: 'source-bottom', position: Position.Bottom, style: { left: '35%', bottom: '-6px', transform: 'translateX(-50%)' } },
+    { id: 'source-left',   position: Position.Left,   style: { top: '35%',  left: '-6px',   transform: 'translateY(-50%)' } },
+  ];
+
   return (
     <div
       className={`component-node ${selected ? 'selected' : ''}`}
@@ -67,9 +82,17 @@ export const ComponentNode = memo(({ id, data: rawData, selected }: NodeProps) =
           : `0 4px 24px rgba(0,0,0,0.4), ${statusGlow}`,
       } as React.CSSProperties}
     >
-      {!def.isSource && (
-        <Handle type="target" position={Position.Left} id="target" className="node-handle node-handle-in" />
-      )}
+      {/* Multi-position target handles (input = purple) */}
+      {!def.isSource && TARGET_HANDLES.map(({ id: hId, position, style }) => (
+        <Handle
+          key={hId}
+          type="target"
+          position={position}
+          id={hId}
+          className="node-handle-multi node-handle-in"
+          style={style}
+        />
+      ))}
 
       <div className="node-header" style={{ borderColor: def.color }}>
         <ServiceIcon type={data.componentType} size={15} style={{ marginRight: 6 }} />
@@ -207,9 +230,17 @@ export const ComponentNode = memo(({ id, data: rawData, selected }: NodeProps) =
         </div>
       )}
 
-      {!def.isSink && (
-        <Handle type="source" position={Position.Right} id="source" className="node-handle node-handle-out" />
-      )}
+      {/* Multi-position source handles (output = green) */}
+      {!def.isSink && SOURCE_HANDLES.map(({ id: hId, position, style }) => (
+        <Handle
+          key={hId}
+          type="source"
+          position={position}
+          id={hId}
+          className="node-handle-multi node-handle-out"
+          style={style}
+        />
+      ))}
     </div>
   );
 });

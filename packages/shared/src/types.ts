@@ -5,7 +5,8 @@ export type ComponentCategory =
   | 'storage'
   | 'messaging'
   | 'observability'
-  | 'network';
+  | 'network'
+  | 'layer';
 
 export type ComponentType =
   // Clients
@@ -47,7 +48,9 @@ export type ComponentType =
   | 'health-check'
   // Network
   | 'vpc'
-  | 'subnet';
+  | 'subnet'
+  // Layer (container)
+  | 'layer';
 
 export type NodeStatus = 'idle' | 'ok' | 'warning' | 'critical';
 

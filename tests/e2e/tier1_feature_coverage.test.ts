@@ -362,11 +362,16 @@ describe('Tier 1: End-to-End Feature Coverage (F1–F5)', () => {
       expect(data.valid).toBe(true);
     });
 
-    it('F3.5: POST /api/v1/simulation/validate — should validate nodes of all 33 component types successfully', async () => {
+    it('F3.5: POST /api/v1/simulation/validate — should validate nodes of all 34 component types (including layer container)', async () => {
       const allComponentTypes = Object.keys(COMPONENT_DEFINITIONS);
-      expect(allComponentTypes.length).toBe(33);
+      expect(allComponentTypes.length).toBe(34);
 
-      const nodes = allComponentTypes.map((type, idx) => ({
+      // Exclude container/layer types from chain validation (they have no traffic semantics)
+      const trafficTypes = allComponentTypes.filter(
+        (type) => !COMPONENT_DEFINITIONS[type as keyof typeof COMPONENT_DEFINITIONS].isContainer
+      );
+
+      const nodes = trafficTypes.map((type, idx) => ({
         id: `node-${idx}`,
         data: {
           componentType: type,
@@ -375,7 +380,7 @@ describe('Tier 1: End-to-End Feature Coverage (F1–F5)', () => {
         },
       }));
 
-      // Create chain from node-0 to node-32
+      // Create chain from node-0 to node-(N-1)
       const edges = nodes.slice(0, -1).map((n, idx) => ({
         id: `edge-${idx}`,
         source: n.id,
