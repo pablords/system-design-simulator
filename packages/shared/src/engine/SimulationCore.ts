@@ -1004,6 +1004,60 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
     }
   }
 
+  // Backward failure propagation (Cascading Failures from Sinks/Targets to Sources/Callers)
+  const nodeTotalFailures: Record<string, number> = {};
+  const nodeTotalSuccess: Record<string, number> = {};
+
+  for (const node of nodes) {
+    nodeTotalFailures[node.id] = updatedMetrics[node.id]?.failedRps ?? 0;
+    nodeTotalSuccess[node.id] = updatedMetrics[node.id]?.successRps ?? 0;
+  }
+
+  const reverseOrder = Array.from(visited).reverse();
+  for (const nodeId of reverseOrder) {
+    const node = nodeMap.get(nodeId);
+    if (!node) continue;
+
+    const inbound = inboundRpsMap[nodeId] ?? 0;
+    const failures = nodeTotalFailures[nodeId] ?? 0;
+    const failureRatio = inbound > 0 ? clamp(failures / inbound, 0, 1) : 0;
+
+    if (failureRatio > 0) {
+      const nodeInEdges = inboundEdges[nodeId] ?? [];
+      for (const edge of nodeInEdges) {
+        const edgeRps = edgeRpsMap[edge.id] ?? 0;
+        const additionalFailures = edgeRps * failureRatio;
+
+        edgeFailuresMap[edge.id] = (edgeFailuresMap[edge.id] ?? 0) + additionalFailures;
+        edgeRpsMap[edge.id] = Math.max(0, edgeRps - additionalFailures);
+
+        if (nodeTotalFailures[edge.source] !== undefined) {
+          nodeTotalFailures[edge.source] += additionalFailures;
+          nodeTotalSuccess[edge.source] = Math.max(0, nodeTotalSuccess[edge.source] - additionalFailures);
+        }
+      }
+    }
+  }
+
+  // Update node final metrics and history with cascading failure results
+  for (const node of nodes) {
+    if (updatedMetrics[node.id]) {
+      const finalFailures = Math.round(nodeTotalFailures[node.id]);
+      const finalSuccess = Math.round(nodeTotalSuccess[node.id]);
+      updatedMetrics[node.id].failedRps = finalFailures;
+      updatedMetrics[node.id].successRps = finalSuccess;
+
+      const history = updatedMetrics[node.id].history;
+      if (history && history.length > 0) {
+        const lastSnapshot = history[history.length - 1];
+        if (lastSnapshot) {
+          lastSnapshot.failedRps = finalFailures;
+          lastSnapshot.successRps = finalSuccess;
+        }
+      }
+    }
+  }
+
   // Compute end-to-end latency for each node
   const e2eCache = new Map<string, number>();
   const visiting = new Set<string>();

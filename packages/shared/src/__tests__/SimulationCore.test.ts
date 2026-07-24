@@ -909,6 +909,60 @@ describe('SimulationCore Engine', () => {
       expect(res.bottlenecks.some(b => b.type === 'ram' && b.severity === 'critical')).toBe(true);
     });
 
+    it('should propagate downstream write failures (e.g. storage full) back to the caller app server and source client', () => {
+      const nodes = [
+        {
+          id: 'client-1',
+          data: {
+            componentType: 'client',
+            category: 'client',
+            config: { maxRps: 100, writeRatio: 1.0 },
+          },
+        },
+        {
+          id: 'app-1',
+          data: {
+            componentType: 'app-server',
+            category: 'compute',
+            config: { maxRps: 1000 },
+          },
+        },
+        {
+          id: 'db-1',
+          data: {
+            componentType: 'sql-database',
+            category: 'storage',
+            config: { maxRps: 1000, storageGb: 10 },
+            metrics: { storagePct: 100, status: 'ok' },
+          },
+        },
+      ];
+      const edges = [
+        { id: 'e1', source: 'client-1', target: 'app-1' },
+        { id: 'e2', source: 'app-1', target: 'db-1' },
+      ];
+
+      const res = runSimulationTickCore({ nodes: nodes as any, edges: edges as any, tick: 1, globalTrafficScale: 100 });
+      
+      // db-1 should have 100 failed RPS and 0 success
+      expect(res.updatedMetrics['db-1'].failedRps).toBe(100);
+      expect(res.updatedMetrics['db-1'].successRps).toBe(0);
+
+      // The failures must propagate back to app-1 and client-1
+      expect(res.updatedMetrics['app-1'].failedRps).toBe(100);
+      expect(res.updatedMetrics['app-1'].successRps).toBe(0);
+
+      expect(res.updatedMetrics['client-1'].failedRps).toBe(100);
+      expect(res.updatedMetrics['client-1'].successRps).toBe(0);
+
+      // Edges e1 and e2 must reflect the failure propagation
+      expect(res.updatedEdgeMetrics['e2'].failuresPerSecond).toBe(100);
+      expect(res.updatedEdgeMetrics['e2'].rps).toBe(0);
+
+      expect(res.updatedEdgeMetrics['e1'].failuresPerSecond).toBe(100);
+      expect(res.updatedEdgeMetrics['e1'].rps).toBe(0);
+    });
+
     it('should execute runSimulationBatchCore over multiple ticks', () => {
       const nodes = [
         { id: 'client-1', data: { componentType: 'client', category: 'client', config: { maxRps: 50 } } },
