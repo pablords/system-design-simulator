@@ -29,6 +29,7 @@ export const MetricSnapshotSchema = z.object({
   cpuPct: z.number(),
   ramPct: z.number(),
   latencyMs: z.number(),
+  endToEndLatencyMs: z.number().optional(),
   p50: z.number().optional(),
   p95: z.number().optional(),
   p99: z.number().optional(),

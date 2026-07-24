@@ -710,6 +710,57 @@ describe('SimulationCore Engine', () => {
       expect(res.updatedMetrics['tracing-1'].inboundRps).toBe(10);
     });
 
+    it('should calculate end-to-end latency propagating downstream dependencies back to the source client', () => {
+      const nodes = [
+        {
+          id: 'client-1',
+          data: {
+            componentType: 'client',
+            category: 'client',
+            config: { maxRps: 100, clientLatencyMs: 20 },
+          },
+        },
+        {
+          id: 'lb-1',
+          data: {
+            componentType: 'load-balancer',
+            category: 'traffic-edge',
+            config: { maxRps: 200 },
+          },
+        },
+        {
+          id: 'app-1',
+          data: {
+            componentType: 'app-server',
+            category: 'compute',
+            config: { maxRps: 200 },
+          },
+        },
+      ];
+
+      const edges = [
+        { id: 'e1', source: 'client-1', target: 'lb-1', data: { networkLatencyMs: 15 } },
+        { id: 'e2', source: 'lb-1', target: 'app-1', data: { networkLatencyMs: 10 } },
+      ];
+
+      const res = runSimulationTickCore({ nodes: nodes as any, edges: edges as any, tick: 1, globalTrafficScale: 100 });
+      
+      const appLat = res.updatedMetrics['app-1'].latencyMs; // 5ms base
+      const lbLat = res.updatedMetrics['lb-1'].latencyMs; // 2ms base
+      const clientLat = res.updatedMetrics['client-1'].latencyMs; // 20ms clientLatencyMs config
+
+      // Client E2E should be:
+      // Client Base Latency (20)
+      // + Edge 1 Network (15) + Edge 1 Connection Wait (0)
+      // + LB Base Latency (2)
+      // + Edge 2 Network (10) + Edge 2 Connection Wait (0)
+      // + App Base Latency (5)
+      // Total expected: 20 + 15 + 2 + 10 + 5 = 52ms
+      const expectedE2E = clientLat + 15 + lbLat + 10 + appLat;
+      
+      expect(res.updatedMetrics['client-1'].endToEndLatencyMs).toBeCloseTo(expectedE2E, 1);
+    });
+
     it('should execute runSimulationBatchCore over multiple ticks', () => {
       const nodes = [
         { id: 'client-1', data: { componentType: 'client', category: 'client', config: { maxRps: 50 } } },

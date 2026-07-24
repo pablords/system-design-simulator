@@ -803,6 +803,74 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
     }
   }
 
+  // Compute end-to-end latency for each node
+  const e2eCache = new Map<string, number>();
+  const visiting = new Set<string>();
+
+  function getEndToEndLatency(nodeId: string): number {
+    if (e2eCache.has(nodeId)) return e2eCache.get(nodeId)!;
+    if (visiting.has(nodeId)) {
+      return updatedMetrics[nodeId]?.latencyMs ?? 0;
+    }
+    visiting.add(nodeId);
+
+    const nodeMetrics = updatedMetrics[nodeId];
+    if (!nodeMetrics || (nodeMetrics.restartCooldownTicks ?? 0) > 0) {
+      visiting.delete(nodeId);
+      e2eCache.set(nodeId, 0);
+      return 0;
+    }
+
+    const baseLat = nodeMetrics.latencyMs ?? 0;
+    const outEdges = outboundEdges[nodeId] ?? [];
+    const businessOutEdges = outEdges.filter((e) => {
+      const tgt = nodeMap.get(e.target);
+      return tgt?.data.category !== 'observability';
+    });
+
+    if (businessOutEdges.length === 0) {
+      visiting.delete(nodeId);
+      e2eCache.set(nodeId, baseLat);
+      return baseLat;
+    }
+
+    let maxDownstream = 0;
+    const activeEdges = businessOutEdges.filter((e) => (edgeRpsMap[e.id] ?? 0) > 0);
+    const edgesToTrace = activeEdges.length > 0 ? activeEdges : businessOutEdges;
+
+    for (const edge of edgesToTrace) {
+      const edgeNetwork = edge.data?.networkLatencyMs ?? 0;
+      const edgeWait = edgeWaitTimeMap[edge.id] ?? 0;
+      const targetE2E = getEndToEndLatency(edge.target);
+      const pathLatency = edgeNetwork + edgeWait + targetE2E;
+      if (pathLatency > maxDownstream) {
+        maxDownstream = pathLatency;
+      }
+    }
+
+    const totalE2E = baseLat + maxDownstream;
+    visiting.delete(nodeId);
+    e2eCache.set(nodeId, totalE2E);
+    return totalE2E;
+  }
+
+  for (const node of nodes) {
+    if (updatedMetrics[node.id]) {
+      const e2e = getEndToEndLatency(node.id);
+      const roundedE2E = Math.round(e2e * 10) / 10;
+      updatedMetrics[node.id].endToEndLatencyMs = roundedE2E;
+      
+      const history = updatedMetrics[node.id].history;
+      if (history && history.length > 0) {
+        const lastSnapshot = history[history.length - 1];
+        if (lastSnapshot) {
+          (lastSnapshot as any).endToEndLatencyMs = roundedE2E;
+        }
+      }
+    }
+  }
+
+
   // Final Edge Metrics computation
   for (const edge of edges) {
     const rps = Math.round(edgeRpsMap[edge.id] ?? 0);
