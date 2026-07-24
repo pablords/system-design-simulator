@@ -128,6 +128,7 @@ export interface NodeMetrics {
   p99?: number;
   logs?: string[];
   activeReplicas?: number;
+  usedStorageGb?: number;
   consumerLag?: number;
 }
 

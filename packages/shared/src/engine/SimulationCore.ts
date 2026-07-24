@@ -740,17 +740,33 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
     if (node.data.componentType === 'cache') {
       const prevRam = prevMetrics?.ramPct ?? def.baseRamPct;
       const memLimit = cfg.memoryLimitMb ?? 512;
-      const growth = (inboundWrite * 2.0 / memLimit) * 100;
-      ramPct = clamp(prevRam + growth, def.baseRamPct, 100);
+      const evictionPolicy = cfg.evictionPolicy ?? 'lru';
 
-      if (ramPct >= 100) {
-        ramPct = 100;
-        if (cfg.evictionPolicy === 'none') {
+      // Writes add memory pressure
+      const growth = (inboundWrite * 2.0 / memLimit) * 100;
+      
+      // Natural TTL / key expiration decay: keys expire over time
+      const naturalDecay = (prevRam - def.baseRamPct) * 0.05 + 0.5;
+
+      let currentRam = prevRam + growth - naturalDecay;
+
+      if (evictionPolicy !== 'none') {
+        if (currentRam > 85) {
+          // Active eviction kicks in to clear older entries and maintain RAM around 80-85%
+          const efficiencyMultiplier = evictionPolicy === 'lru' ? 1.0 : evictionPolicy === 'lfu' ? 0.9 : 0.8;
+          const excess = (currentRam - 80) * efficiencyMultiplier * 0.4;
+          currentRam = Math.max(80, currentRam - excess);
+          cacheThrashingHitRatePenalty = clamp((inboundWrite / memLimit) * 0.3, 0, 0.4);
+        }
+      } else {
+        // No eviction policy ('none'): RAM locks at 100% and generates OOM write errors
+        if (currentRam >= 100) {
+          currentRam = 100;
           cacheOomWriteErrors = inboundWrite;
-        } else {
-          cacheThrashingHitRatePenalty = clamp((inboundWrite / memLimit) * 0.5, 0, 0.5);
         }
       }
+
+      ramPct = clamp(currentRam, def.baseRamPct, 100);
     } else {
       ramPct = clamp(def.baseRamPct + utilization * (100 - def.baseRamPct) * 0.5, 0, 100);
     }
@@ -786,11 +802,14 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
     const baseLatency = def.isSource && cfg.clientLatencyMs !== undefined ? cfg.clientLatencyMs : def.baseLatencyMs;
     const latencyMs = baseLatency * (1 + overloadFactor * 3) + queuingDelayMs;
 
-    const prevStoragePct = prevMetrics?.storagePct ?? 0;
-    let storagePct = prevStoragePct;
+    let storagePct = 0;
+    let usedStorageGb = prevMetrics?.usedStorageGb ?? 0;
+
     if (def.accumulatesStorage && cfg.storageGb && cfg.storageGb > 0) {
-      const storageGrowthPerTick = (inboundWrite * 5.0) / cfg.storageGb;
-      storagePct = clamp(prevStoragePct + storageGrowthPerTick, 0, 100);
+      // Increment stored GB based on inbound write throughput (e.g., 100 Write RPS = 0.05 GB/tick)
+      const storageGrowthGb = (inboundWrite * 0.0005);
+      usedStorageGb = Math.min(cfg.storageGb, (prevMetrics?.usedStorageGb ?? (prevMetrics?.storagePct ?? 0) * cfg.storageGb / 100) + storageGrowthGb);
+      storagePct = clamp((usedStorageGb / cfg.storageGb) * 100, 0, 100);
     }
 
     const outboundTargets = outboundEdges[node.id] ?? [];
@@ -1038,6 +1057,7 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
       p95,
       p99,
       activeReplicas: scaledReplicas,
+      usedStorageGb: Math.round(usedStorageGb * 1000) / 1000,
     };
 
     if (def.isSource) {

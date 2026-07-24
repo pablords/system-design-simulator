@@ -64,6 +64,7 @@ export const NodeMetricsSchema = z.object({
   p99: z.number().optional(),
   logs: z.array(z.string()).optional(),
   activeReplicas: z.number().optional(),
+  usedStorageGb: z.number().optional(),
   consumerLag: z.number().optional(),
 });
 

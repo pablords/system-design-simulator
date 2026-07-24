@@ -963,6 +963,41 @@ describe('SimulationCore Engine', () => {
       expect(res.updatedEdgeMetrics['e1'].rps).toBe(0);
     });
 
+    it('should evict memory when cache reaches high usage and lower RAM with LRU policy', () => {
+      const nodes = [
+        {
+          id: 'cache-1',
+          data: {
+            componentType: 'cache',
+            category: 'storage',
+            config: { maxRps: 1000, memoryLimitMb: 512, evictionPolicy: 'lru' },
+            metrics: { ramPct: 95, inboundWriteRps: 100 },
+          },
+        },
+      ];
+      const res = runSimulationTickCore({ nodes: nodes as any, edges: [], tick: 1, globalTrafficScale: 100 });
+      // Active eviction should reduce RAM below 95%
+      expect(res.updatedMetrics['cache-1'].ramPct).toBeLessThan(95);
+    });
+
+    it('should recalculate lower storagePct when storageGb capacity is increased', () => {
+      const nodes = [
+        {
+          id: 'db-1',
+          data: {
+            componentType: 'sql-database',
+            category: 'storage',
+            config: { maxRps: 1000, storageGb: 200 }, // Increased from 50 GB to 200 GB
+            metrics: { storagePct: 100, usedStorageGb: 50 }, // Was 100% full under 50 GB limit
+          },
+        },
+      ];
+      const res = runSimulationTickCore({ nodes: nodes as any, edges: [], tick: 1, globalTrafficScale: 100 });
+      // With 50 GB used out of 200 GB, storagePct should drop to ~25%
+      expect(res.updatedMetrics['db-1'].storagePct).toBe(25);
+    });
+
+
     it('should execute runSimulationBatchCore over multiple ticks', () => {
       const nodes = [
         { id: 'client-1', data: { componentType: 'client', category: 'client', config: { maxRps: 50 } } },
