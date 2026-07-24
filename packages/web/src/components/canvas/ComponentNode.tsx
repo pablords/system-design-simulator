@@ -73,7 +73,24 @@ export const ComponentNode = memo(({ id, data: rawData, selected }: NodeProps) =
 
       <div className="node-header" style={{ borderColor: def.color }}>
         <ServiceIcon type={data.componentType} size={15} style={{ marginRight: 6 }} />
-        <span className="node-label">{config.label}</span>
+        <span className="node-label">
+          {config.label}
+          {config.dbReplication === 'master-replica' && (
+            <span style={{
+              fontSize: '8px',
+              padding: '1px 4px',
+              borderRadius: '3px',
+              background: 'var(--node-color)',
+              color: '#0f172a',
+              fontWeight: 'bold',
+              marginLeft: '6px',
+              verticalAlign: 'middle',
+              display: 'inline-block'
+            }}>
+              MASTER
+            </span>
+          )}
+        </span>
         <button className="node-delete-btn" onClick={handleDelete} title="Remove">
           <Trash2 size={12} />
         </button>
@@ -128,9 +145,59 @@ export const ComponentNode = memo(({ id, data: rawData, selected }: NodeProps) =
         )}
       </div>
 
-      {config.replicas !== undefined && config.replicas > 1 && (
+      {config.replicas !== undefined && config.replicas > 1 && config.dbReplication !== 'master-replica' && (
         <div className="node-replicas-badge" style={{ borderColor: def.color }}>
           ×{config.replicas}
+        </div>
+      )}
+
+      {config.dbReplication === 'master-replica' && config.replicas !== undefined && config.replicas > 0 && (
+        <div style={{
+          marginTop: '10px',
+          padding: '8px',
+          borderTop: '1px dashed rgba(255,255,255,0.08)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px'
+        }}>
+          <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.05em' }}>
+            RÉPLICAS DE LEITURA ({config.replicas})
+          </span>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {Array.from({ length: config.replicas }).map((_, i) => (
+              <div
+                key={i}
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '6px',
+                  background: 'rgba(0,0,0,0.3)',
+                  border: '1px dashed var(--node-color)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative'
+                }}
+                title={`Read Replica #${i + 1}`}
+              >
+                <ServiceIcon type={data.componentType} size={10} />
+                <span style={{
+                  position: 'absolute',
+                  bottom: '1px',
+                  right: '1px',
+                  background: 'var(--node-color)',
+                  color: '#0f172a',
+                  fontSize: '6px',
+                  fontWeight: 'bold',
+                  padding: '0 2px',
+                  borderRadius: '2px',
+                  lineHeight: '1'
+                }}>
+                  R
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

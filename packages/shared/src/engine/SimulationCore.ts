@@ -477,10 +477,8 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
         let queueSize = 0;
         let waitTimeMs = 0;
         let timeoutsPerSecond = 0;
-        let allocated = requested;
 
         if (requested > clientPoolLimit) {
-          allocated = clientPoolLimit;
           queueSize = Math.max(0, requested - clientPoolLimit);
           const waitSec = clientPoolLimit > 0 ? (queueSize * (latencyMs / 1000)) / clientPoolLimit : 0;
           waitTimeMs = waitSec * 1000;
