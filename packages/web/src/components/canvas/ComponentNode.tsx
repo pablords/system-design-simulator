@@ -122,7 +122,14 @@ export const ComponentNode = memo(({ id, data: rawData, selected }: NodeProps) =
       <div className="node-status-bar" style={{ backgroundColor: statusColor }} />
 
       <div className="node-metrics">
-        {status === 'idle' ? (
+        {def.category === 'observability' ? (
+          <div className="node-metric-row" style={{ justifyContent: 'space-between' }}>
+            <span className="metric-key" style={{ color: def.color, fontWeight: 600 }}>Coleta</span>
+            <span className="metric-val" style={{ color: '#f8fafc', fontWeight: 600 }}>
+              {status === 'idle' ? '0 req/s' : `${metrics.inboundRps > 0 ? metrics.inboundRps.toFixed(1) : 0} req/s`}
+            </span>
+          </div>
+        ) : status === 'idle' ? (
           <div className="node-idle-msg">Idle — press Simulate</div>
         ) : (metrics.restartCooldownTicks ?? 0) > 0 ? (
           <div className="node-crashed-alert animate-flash-fast">

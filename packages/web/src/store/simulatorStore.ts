@@ -434,7 +434,13 @@ export const useSimulatorStore = create<SimulatorStore>()(
     set((state) => ({
       simulationIntervalId: null,
       simulation: { running: false, tick: 0, speed: state.simulation.speed, totalRps: 0, bottlenecks: [], globalTrafficScale: 100 },
-      nodes: state.nodes.map((n) => ({ ...n, data: { ...n.data, metrics: createDefaultMetrics() } })),
+      nodes: state.nodes.map((n) => ({
+        ...n,
+        data: {
+          ...n.data,
+          metrics: createDefaultMetrics(),
+        },
+      })),
     }));
   },
 

@@ -143,8 +143,7 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
   const visited = new Set<string>();
   const queue = nodes.filter((n) => COMPONENT_DEFINITIONS[n.data.componentType as keyof typeof COMPONENT_DEFINITIONS]?.isSource).map((n) => n.id);
 
-  // === PHASE 3: Layer-scoped auto-telemetry ===
-  // Build maps: which nodes belong to which layer, which obs nodes are in each layer
+  // === PHASE 3: Layer-scoped auto-telemetry maps ===
   const obsNodeTypes = new Set(['metrics', 'logs', 'tracing']);
   const layerObsMap: Record<string, string[]> = {};  // layerId -> obs node ids
   const nodeLayerMap: Record<string, string> = {};   // nodeId -> layerId
@@ -158,30 +157,9 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
       layerObsMap[parentId].push(node.id);
     }
   }
+  // === END MAP PREPARATION ===
 
-  // For each non-obs node inside a layer that has obs nodes:
-  // inject 2% of its RPS into each obs node in the same layer (telemetry overhead)
-  for (const node of nodes) {
-    const layerId = nodeLayerMap[node.id];
-    if (!layerId) continue;
-    if (obsNodeTypes.has(node.data.componentType)) continue; // skip obs nodes themselves
 
-    const obsNodesInLayer = layerObsMap[layerId] ?? [];
-    if (obsNodesInLayer.length === 0) continue;
-
-    const def = COMPONENT_DEFINITIONS[node.data.componentType as keyof typeof COMPONENT_DEFINITIONS];
-    if (!def || def.isContainer) continue;
-
-    // Approximate telemetry load: 2% of node's maxRps * replicas
-    const nodeMaxRps = (node.data.config.maxRps ?? 0) * (node.data.config.replicas ?? 1) * (globalTrafficScale / 100);
-    const telemetryRps = nodeMaxRps * 0.02;
-
-    for (const obsNodeId of obsNodesInLayer) {
-      inboundRpsMap[obsNodeId] = (inboundRpsMap[obsNodeId] ?? 0) + telemetryRps;
-      inboundReadRpsMap[obsNodeId] = (inboundReadRpsMap[obsNodeId] ?? 0) + telemetryRps;
-    }
-  }
-  // === END PHASE 3 ===
 
   while (queue.length > 0) {
     const currentId = queue.shift()!;
@@ -609,6 +587,31 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
       if (!visited2.has(edge.target)) queue2.push(edge.target);
     }
   }
+
+  // === Real-time Layer Auto-Telemetry (Post-BFS) ===
+  for (const node of nodes) {
+    const layerId = nodeLayerMap[node.id];
+    if (!layerId) continue;
+    if (obsNodeTypes.has(node.data.componentType)) continue; // skip obs nodes themselves
+
+    const obsNodesInLayer = layerObsMap[layerId] ?? [];
+    if (obsNodesInLayer.length === 0) continue;
+
+    const def = COMPONENT_DEFINITIONS[node.data.componentType as keyof typeof COMPONENT_DEFINITIONS];
+    if (!def || def.isContainer) continue;
+
+    // Use real-time inbound traffic processed for this node
+    const realInboundRps = finalInboundRpsMap[node.id] ?? 0;
+    if (realInboundRps <= 0) continue;
+
+    const telemetryRps = realInboundRps * 0.02; // 2% telemetry traffic overhead
+
+    for (const obsNodeId of obsNodesInLayer) {
+      finalInboundRpsMap[obsNodeId] = (finalInboundRpsMap[obsNodeId] ?? 0) + telemetryRps;
+      finalInboundReadRpsMap[obsNodeId] = (finalInboundReadRpsMap[obsNodeId] ?? 0) + telemetryRps;
+    }
+  }
+  // === END REAL-TIME TELEMETRY ===
 
   // Now compute final node metrics
   const updatedMetrics: Record<string, any> = {};
