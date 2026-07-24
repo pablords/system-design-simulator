@@ -705,7 +705,7 @@ export function runSimulationTickCore(input: SimulationTickInput): SimulationTic
     const prevStoragePct = prevMetrics?.storagePct ?? 0;
     let storagePct = prevStoragePct;
     if (def.accumulatesStorage && cfg.storageGb && cfg.storageGb > 0) {
-      const storageGrowthPerTick = (inboundWrite * 0.0002) / cfg.storageGb;
+      const storageGrowthPerTick = (inboundWrite * 0.05) / cfg.storageGb;
       storagePct = clamp(prevStoragePct + storageGrowthPerTick, 0, 100);
     }
 

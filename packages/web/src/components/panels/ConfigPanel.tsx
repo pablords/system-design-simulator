@@ -994,6 +994,9 @@ export const ConfigPanel: React.FC = () => {
                 {config.writeRatio !== undefined && (
                   <Slider label="Percentual de Escrita (W)" value={Math.round(config.writeRatio * 100)} min={0} max={100} step={5} unit="%" onChange={(v) => update('writeRatio', v / 100)} />
                 )}
+                {config.storageGb !== undefined && (
+                  <Slider label="Capacidade de Armazenamento" value={config.storageGb} min={1} max={10000} step={config.storageGb < 100 ? 5 : 50} unit=" GB" onChange={(v) => update('storageGb', v)} />
+                )}
                 {def.isSource && config.clientLatencyMs !== undefined && (
                   <Slider label="Ping de Última Milha (Cliente)" value={config.clientLatencyMs} min={0} max={250} step={5} unit=" ms" onChange={(v) => update('clientLatencyMs', v)} />
                 )}
